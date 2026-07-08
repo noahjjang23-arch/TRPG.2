@@ -1,0 +1,2507 @@
+document.addEventListener("DOMContentLoaded", () => {
+  const STORAGE_KEY = "trpg_master_dashboard_v13_complete";
+  const $ = (id) => document.getElementById(id);
+
+  const COMMON_STATS = ["STR","DEX","VIT","INT","WIS","CHA","MND","LUK","FAITH","FAME"];
+  const STAT_LABELS = {
+    STR:"STR 힘", DEX:"DEX 민첩", VIT:"VIT 체력", INT:"INT 지능", WIS:"WIS 지혜",
+    CHA:"CHA 매력", MND:"MND 정신력", LUK:"LUK 행운", FAITH:"신앙", FAME:"명성도"
+  };
+  const EQUIP_SLOTS = {
+    weapon:"무기", helmet:"투구", armor:"갑옷", gloves:"장갑", boots:"신발", accessory1:"악세사리 1", accessory2:"악세사리 2"
+  };
+
+  let selectedLevelPlayerId = null;
+  let selectedInventoryPlayerName = "";
+  let tempMapImage = "";
+  let tempPlayerPortrait = "";
+  let tempNpcPortrait = "";
+  let tempEquipmentImage = "";
+  let tempItemImage = "";
+  let tempForgeImage = "";
+  let tempMapEffects = [];
+  let currentForgeState = { npcId: "", tab: "enhance", selectedEquipmentId: "", listOpen: false, surface: "main" };
+  let tempBossFumbles = [];
+
+  const defaultData = {
+    mode: "mode",
+    round: 0,
+    diceLog: [],
+    sceneHistory: [],
+    activeMapId: "",
+    activeBossIds: [],
+    currentTurn: 0,
+    turns: [],
+    maps: [],
+    conditions: [],
+    skills: [],
+    players: [],
+    npcs: [],
+    bosses: [],
+    items: [],
+    materials: [],
+    enchants: [],
+    equipments: [],
+    fumbles: [],
+    shops: [],
+    forges: {},
+    upgradeRules: [],
+    worldEvents: [],
+    encounters: [],
+    factions: [],
+    skillTrees: [],
+    saveSlots: {},
+    worldState: { turn: 0, weather: "맑음", time: "낮" },
+    activeNpcIds: [],
+    npcJobConfigs: {
+      merchant: { title: "상인", desc: "물건을 사고팔 수 있는 NPC." },
+      enchanter: { title: "인첸트", desc: "장비에 인챈트를 부여하거나 해제할 수 있는 NPC." },
+      repair: { title: "강화/수리", desc: "장비 강화와 내구도 수리를 담당하는 NPC." },
+      quest: { title: "퀘스트수주", desc: "퀘스트를 주거나 완료 보상을 지급하는 NPC." },
+      god: { title: "신", desc: "강력한 축복, 저주, 신앙 관련 판정을 담당하는 존재." }
+    },
+    access: { role: "none", masterPassword: "" },
+    creation: {
+      diceSides: 20,
+      rollLimit: 3,
+      classRollLimit: 3,
+      unusedGold: 10,
+      unusedExp: 5,
+      unusedEquipmentId: "",
+      classes: [],
+      merchantShops: [],
+      shopLooks: {}
+    },
+    playerSession: {
+      currentPlayerId: "",
+      creationRoll: 0,
+      creationRollsUsed: 0,
+      classRoll: 0,
+      classRollsUsed: 0,
+      creationRemaining: 0,
+      creationStats: {}
+    },
+    advanced: {
+      cutscenes: [],
+      sfx: [],
+      fearRules: [],
+      curses: [],
+      deities: [],
+      resources: [],
+      bossPhases: [],
+      bossParts: [],
+      inspections: [],
+      dungeonNodes: [],
+      environments: [],
+      camps: [],
+      timers: [],
+      worldChanges: [],
+      recipes: [],
+      sets: [],
+      personalQuests: [],
+      memories: [],
+      endings: [],
+      sessionNotes: []
+    },
+    editing: {}
+  };
+
+  let data = loadData();
+  init();
+
+  function init() {
+    seedIfEmpty();
+    buildStatInputs();
+    bindEvents();
+    renderAll();
+  }
+
+  function seedIfEmpty() {
+    if (!data.conditions.length) {
+      data.conditions.push(
+        {id:makeId(), name:"중독", stat:"VIT", effect:"dot", value:3, duration:3, desc:"턴마다 HP 3 감소"},
+        {id:makeId(), name:"보호막", stat:"VIT", effect:"shield", value:10, duration:1, desc:"피해 10 흡수"},
+        {id:makeId(), name:"약화", stat:"STR", effect:"statDown", value:2, duration:2, desc:"STR -2"}
+      );
+    }
+    if (!data.players.length) {
+      data.players.push({
+        id:makeId(), name:"아렌", level:1, exp:0, nextExp:100, statPoints:0,
+        hp:32, maxHp:40, mp:12, maxMp:20, gold:120, hype:3, status:"정상", memo:"전방 탱커",
+        portrait:"", stats:baseStats({STR:4,DEX:2,VIT:5,INT:1,WIS:2,MND:3,LUK:1,FAME:1}), conditions:[], disabledWeaponTurns:0
+      });
+    }
+    if (!data.maps.length) {
+      data.maps.push({id:makeId(), name:"검은 숲", desc:"빛이 거의 들지 않는 숲. 축축한 공기와 낮은 속삭임이 흐른다.", bgm:"", image:"", effects:[]});
+    }
+    if (!data.bosses.length) {
+      data.bosses.push({
+        id:makeId(), name:"고블린 왕", hp:100, maxHp:100, status:"정상", attackType:"blunt", memo:"첫 보스",
+        stats:baseStats({STR:5,DEX:2,VIT:5,MND:2,LUK:1}), conditions:[], fumbleIds:[],
+        reward:{exp:120,gold:80,itemName:"고블린 왕의 뿔",itemQty:1,itemDesc:"전리품"}
+      });
+    }
+    if (!data.materials.length) {
+      data.materials.push({id:makeId(), name:"강철", durabilityBonus:20, stats:baseStats({STR:1}), desc:"단단하고 무난한 소재"});
+    }
+    if (!data.fumbles.length) {
+      data.fumbles.push({id:makeId(), name:"무기 삐끗", type:"weaponDurability", stat:"STR", value:-10, duration:1, desc:"무기 내구도 -10"});
+    }
+    if (!data.factions.length) {
+      data.factions.push({id:makeId(), name:"황금상단", rep:0, desc:"상인 연합 세력"});
+    }
+    if (!data.encounters.length) {
+      data.encounters.push({id:makeId(), name:"수상한 발자국", weight:3, desc:"흙길 위에 사람과 짐승의 발자국이 뒤섞여 있다."});
+    }
+    if (!data.upgradeRules.length) {
+      data.upgradeRules.push({id:makeId(), level:1, success:100, cost:20, statBonus:1, durabilityPenalty:0, breakable:false});
+    }
+    save();
+  }
+
+  function loadData() {
+    try {
+      const saved = localStorage.getItem(STORAGE_KEY);
+      if (!saved) return structuredClone(defaultData);
+      const parsed = JSON.parse(saved);
+      normalize(parsed);
+      return parsed;
+    } catch {
+      return structuredClone(defaultData);
+    }
+  }
+
+  function normalize(d) {
+    Object.keys(defaultData).forEach(k => d[k] ??= structuredClone(defaultData[k]));
+    ["players","npcs","bosses"].forEach(group => {
+      d[group].forEach(a => {
+        a.stats = baseStats(a.stats);
+        a.conditions ??= a.appliedConditions ?? [];
+        a.disabledWeaponTurns ??= 0;
+        if (group === "npcs") { a.job ??= "merchant"; a.portrait ??= ""; }
+      });
+    });
+    d.players.forEach(p => { p.level??=1; p.exp??=0; p.nextExp??=100; p.statPoints??=0; p.hype??=0; });
+    d.maps.forEach(m => { m.effects ??= []; });
+    d.items.forEach(i => { i.image ??= ""; i.qty ??= 1; i.owner ??= ""; });
+    d.activeNpcIds ??= [];
+    d.shops ??= [];
+    d.forges ??= {};
+    Object.keys(d.forges).forEach(id => {
+      d.forges[id] = normalizeForgeConfig(d.forges[id]);
+    });
+    d.upgradeRules ??= [];
+    d.worldEvents ??= [];
+    d.encounters ??= [];
+    d.factions ??= [];
+    d.skillTrees ??= [];
+    d.saveSlots ??= {};
+    d.access ??= { role: "none", masterPassword: "" };
+    d.creation ??= structuredClone(defaultData.creation);
+    d.creation.classes ??= [];
+    d.creation.classes.forEach(c => {
+      c.minRoll ??= 1;
+      c.maxRoll ??= 20;
+      c.desc ??= "";
+      c.statMods = baseStats(c.statMods);
+      c.isMerchant ??= false;
+      c.shopNpcId ??= "";
+      c.skillIds ??= [];
+    });
+    d.creation.rollLimit ??= 3;
+    d.creation.classRollLimit ??= 3;
+    d.creation.merchantShops ??= [];
+    d.creation.shopLooks ??= {};
+    d.playerSession ??= structuredClone(defaultData.playerSession);
+    d.playerSession.creationRollsUsed ??= 0;
+    d.playerSession.classRoll ??= 0;
+    d.playerSession.classRollsUsed ??= 0;
+    d.playerSession.creationStats ??= {};
+    d.advanced ??= structuredClone(defaultData.advanced);
+    Object.keys(defaultData.advanced).forEach(k => d.advanced[k] ??= []);
+    d.worldState ??= { turn: 0, weather: "맑음", time: "낮" };
+    d.npcJobConfigs ??= structuredClone(defaultData.npcJobConfigs);
+    d.bosses.forEach(b => { b.fumbleIds ??= []; b.attackType ??= "slash"; b.reward ??= {exp:0,gold:0,itemName:"",itemQty:1,itemDesc:""}; });
+    d.materials.forEach(m => { m.stats = baseStats(m.stats); });
+    d.enchants.forEach(e => { e.stats = baseStats(e.stats); });
+    d.equipments.forEach(e => { e.stats = baseStats(e.stats); e.durability ??= e.maxDurability ?? 10; e.maxDurability ??= e.durability ?? 10; e.attackType ??= "slash"; e.resists ??= {slash:0,pierce:0,blunt:0,special:0}; e.owner ??= e.equippedBy || ""; e.upgradeLevel ??= 0; });
+  }
+
+  function save() { localStorage.setItem(STORAGE_KEY, JSON.stringify(data)); }
+  function makeId() { return "id_" + Date.now() + "_" + Math.random().toString(16).slice(2); }
+  function baseStats(values={}) { const o={}; COMMON_STATS.forEach(s=>o[s]=Number(values[s]||0)); return o; }
+  function normalizeForgeConfig(cfg={}) {
+    return {
+      image: cfg.image || "",
+      intro: cfg.intro || "무기와 장비를 손질하는 대장간입니다.",
+      upgradePrice: Number(cfg.upgradePrice ?? 30),
+      repairPrice: Number(cfg.repairPrice ?? 2),
+      mode: cfg.mode || "chance",
+      successChance: Number(cfg.successChance ?? 70),
+      destroyFrom: Number(cfg.destroyFrom ?? 8)
+    };
+  }
+
+  function buildStatInputs() {
+    [
+      ["playerStats","player"],["npcStats","npc"],["bossStats","boss"],["materialStats","material"],["enchantStats","enchant"],["equipmentStats","equipment"],["classStats","class"]
+    ].forEach(([boxId,prefix]) => {
+      const box=$(boxId); if(!box) return; box.innerHTML="";
+      COMMON_STATS.forEach(stat => box.insertAdjacentHTML("beforeend", `<input id="${prefix}${stat}" type="number" placeholder="${STAT_LABELS[stat]}" />`));
+    });
+    ["conditionStat","skillStat","checkStatSelect","enchantDebuff","fumbleStat"].forEach(fillStatSelect);
+  }
+
+  function fillStatSelect(id) {
+    const select=$(id); if(!select) return; select.innerHTML="";
+    if(id==="enchantDebuff") {
+      const none=document.createElement("option"); none.value=""; none.textContent="디버프 없음"; select.appendChild(none);
+    }
+    COMMON_STATS.forEach(stat => {
+      const opt=document.createElement("option"); opt.value=stat; opt.textContent=STAT_LABELS[stat]; select.appendChild(opt);
+    });
+  }
+
+  function bindEvents() {
+    const clicks = {
+      "enterMasterBtn": () => requestMasterAccess(),
+      "enterPlayerBtn": () => enterPlayerMode(),
+      "goModeFromMasterBtn": () => setMode("mode"),
+      "goModeFromGameBtn": () => setMode("mode"),
+      "startGameBtn": () => setMode("game"),
+      "backMasterBtn": () => setMode("master"),
+      "playerBackModeBtn": () => setMode("mode"),
+      "saveMasterPasswordBtn": saveMasterPassword,
+      "clearMasterPasswordBtn": clearMasterPassword,
+      "closeMasterLoginBtn": () => $("masterLoginModal")?.classList.add("hidden"),
+      "confirmMasterLoginBtn": confirmMasterLogin,
+      "standalonePlayerRollBtn": standalonePlayerRoll,
+      "resetAllBtn": resetAllData,
+      "exportBtn": exportData,
+      "addMapEffectBtn": addTempMapEffect,
+      "addMapBtn": addMap,
+      "loadMapBtn": loadMap,
+      "addConditionBtn": addCondition,
+      "addSkillBtn": addSkill,
+      "addPlayerBtn": addPlayer,
+      "addNpcBtn": addNpc,
+      "saveNpcJobConfigBtn": saveNpcJobConfig,
+      "addBossFumbleBtn": addTempBossFumble,
+      "addBossBtn": addBoss,
+      "addMaterialBtn": addMaterial,
+      "addEnchantBtn": addEnchant,
+      "addEquipmentBtn": addEquipment,
+      "addItemBtn": addItem,
+      "addFumbleBtn": addFumble,
+      "rollBtn": rollD20,
+      "clearDiceLogBtn": () => { data.diceLog=[]; save(); renderLog(); },
+      "statCheckBtn": runSkillCheck,
+      "addTurnBtn": addTurn,
+      "nextTurnBtn": nextTurn,
+      "loadBossBtn": loadActiveBoss,
+      "hideBossesBtn": () => { data.activeBossIds=[]; save(); renderActiveBosses(); },
+      "loadNpcBtn": loadActiveNpc,
+      "hideNpcsBtn": () => { data.activeNpcIds=[]; save(); renderActiveNpcs(); },
+      "endCombatBtn": endCombat,
+      "closeInventoryBtn": () => $("inventoryModal")?.classList.add("hidden"),
+      "closeSkillBtn": () => $("skillModal")?.classList.add("hidden"),
+      "closeLevelBtn": () => $("levelModal")?.classList.add("hidden"),
+      "addShopGoodsBtn": addShopGoods,
+      "addUpgradeRuleBtn": addUpgradeRule,
+      "advanceWorldBtn": advanceWorldEvents,
+      "rollEncounterBtn": rollEncounter,
+      "openShopBtn": openShop,
+      "closeShopBtn": () => $("shopModal")?.classList.add("hidden"),
+      "openUpgradeBtn": openUpgrade,
+      "closeUpgradeBtn": () => $("upgradeModal")?.classList.add("hidden"),
+      "effectBossBtn": () => screenEffect("boss"),
+      "effectHitBtn": () => screenEffect("hit"),
+      "effectDangerBtn": () => screenEffect("danger"),
+      "openPlayerViewBtn": enterPlayerMode,
+      "partialResetBtn": openPartialResetModal,
+      "saveForgeConfigBtn": saveForgeConfig,
+      "toggleLeftPanelBtn": () => $("leftPanel")?.classList.toggle("collapsed"),
+      "toggleLogBtn": () => $("logPanel")?.classList.toggle("hidden-log"),
+      "togglePlayersBtn": () => $("playerHud")?.classList.toggle("hidden"),
+      "quickBossEffect": () => screenEffect("boss"),
+      "quickDangerEffect": () => screenEffect("danger")
+    };
+
+    for (const [id, fn] of Object.entries(clicks)) {
+      $(id)?.addEventListener("click", fn);
+    }
+
+    const changes = {
+      "importFile": importData,
+      "mapImageFile": e => readImage(e, v => tempMapImage = v),
+      "playerPortrait": e => readImage(e, v => tempPlayerPortrait = v),
+      "npcPortrait": e => readImage(e, v => tempNpcPortrait = v),
+      "equipmentImage": e => readImage(e, v => tempEquipmentImage = v),
+      "itemImage": e => readImage(e, v => tempItemImage = v),
+      "forgeImage": e => readImage(e, v => tempForgeImage = v),
+      "npcJobConfigSelect": fillNpcJobConfigForm,
+      "checkActorSelect": renderRuntimeSkillSelect,
+      "runtimeSkillSelect": applyRuntimeSkill,
+      "shopGoodsType": fillShopGoodsSelect,
+      "forgeNpcSelect": renderForgeConfigForm
+    };
+
+    for (const [id, fn] of Object.entries(changes)) {
+      $(id)?.addEventListener("change", fn);
+    }
+
+    $("masterLoginPassword")?.addEventListener("keydown", (e) => { if(e.key==="Enter") confirmMasterLogin(); });
+
+    ["inventoryModal", "skillModal", "levelModal", "shopModal", "upgradeModal"].forEach(id => {
+      $(id)?.addEventListener("click", e => { if(e.target.id === id) $(id).classList.add("hidden"); });
+    });
+
+    setupSceneDragDrop();
+    bindToastFeedback();
+    bindMasterCategoryTabs();
+    bindAdvancedSystems();
+    bindCreationSystem();
+    document.addEventListener("click", handlePlayerDelegatedClick);
+    document.addEventListener("change", handleDelegatedChange);
+    
+    setInterval(updateHudBar, 300);
+  }
+
+  function createEmptyData(){
+    const empty = structuredClone(defaultData);
+    empty.mode = "master";
+    empty.access = { role: "master", masterPassword: "" };
+    empty.diceLog = [];
+    empty.sceneHistory = [];
+    empty.activeMapId = "";
+    empty.activeBossIds = [];
+    empty.activeNpcIds = [];
+    empty.currentTurn = 0;
+    empty.turns = [];
+    [
+      "maps","conditions","skills","players","npcs","bosses","items",
+      "materials","enchants","equipments","fumbles","shops","upgradeRules",
+      "worldEvents","encounters","factions","skillTrees"
+    ].forEach(key => empty[key] = []);
+    empty.forges = {};
+    empty.saveSlots = {};
+    empty.creation = structuredClone(defaultData.creation);
+    empty.playerSession = structuredClone(defaultData.playerSession);
+    empty.advanced = structuredClone(defaultData.advanced);
+    empty.editing = {};
+    return empty;
+  }
+
+  function resetAllData(){
+    if (!confirm("캐릭터, NPC, 직업, 아이템, 상점, 장면, 로그, 설정을 전부 초기화할까요?")) return;
+    data = createEmptyData();
+    save();
+    tempMapImage = "";
+    tempPlayerPortrait = "";
+    tempNpcPortrait = "";
+    tempEquipmentImage = "";
+    tempItemImage = "";
+    tempForgeImage = "";
+    tempMapEffects = [];
+    tempBossFumbles = [];
+    renderAll();
+    showToast("전체 데이터 초기화 완료");
+  }
+
+  function openPartialResetModal(){
+    const targets = [
+      ["players", "캐릭터", () => { data.players = []; data.playerSession.currentPlayerId = ""; }],
+      ["npcs", "NPC", () => { data.npcs = []; data.activeNpcIds = []; data.creation.merchantShops = []; data.creation.shopLooks = {}; }],
+      ["classes", "직업", () => { data.creation.classes = []; data.playerSession.classRoll = 0; data.playerSession.classRollsUsed = 0; }],
+      ["items", "아이템/장비", () => { data.items = []; data.equipments = []; data.materials = []; data.enchants = []; }],
+      ["shops", "상점", () => { data.shops = []; data.creation.merchantShops = []; data.creation.shopLooks = {}; }],
+      ["scenes", "장면/맵", () => { data.maps = []; data.sceneHistory = []; data.activeMapId = ""; }],
+      ["logs", "로그/턴", () => { data.diceLog = []; data.turns = []; data.currentTurn = 0; data.round = 0; }],
+      ["settings", "설정", () => { data.access = { role: "master", masterPassword: "" }; data.creation = structuredClone(defaultData.creation); }]
+    ];
+    const existing = $("partialResetModal");
+    if (existing) existing.remove();
+    const modal = document.createElement("div");
+    modal.id = "partialResetModal";
+    modal.className = "modal";
+    modal.innerHTML = `<div class="modal-content partial-reset-content">
+      <div class="modal-header">
+        <h2>일부 데이터 초기화</h2>
+        <button id="closePartialResetBtn" class="danger">닫기</button>
+      </div>
+      <p class="muted">초기화할 항목을 선택하세요. 선택 전 확인창이 한 번 더 표시됩니다.</p>
+      <div class="partial-reset-grid">
+        ${targets.map(([key,label])=>`<button class="danger" data-reset-scope="${key}">${label} 초기화</button>`).join("")}
+      </div>
+    </div>`;
+    document.body.appendChild(modal);
+    modal.addEventListener("click", e => {
+      if (e.target.id === "partialResetModal" || e.target.id === "closePartialResetBtn") modal.remove();
+      const btn = e.target.closest?.("[data-reset-scope]");
+      if (!btn) return;
+      const target = targets.find(([key]) => key === btn.dataset.resetScope);
+      if (!target) return;
+      if (!confirm(`${target[1]} 데이터를 초기화할까요?`)) return;
+      target[2]();
+      save();
+      modal.remove();
+      renderAll();
+      showToast(`${target[1]} 초기화 완료`);
+    });
+  }
+
+  function handlePlayerDelegatedClick(e){
+    const leaveBtn = e.target.closest?.('[data-action="leave-character"], #leaveCharacterBtn');
+    if (leaveBtn) {
+      e.preventDefault();
+      e.stopPropagation();
+      leavePlayerCharacter();
+      return;
+    }
+
+    const statBtn = e.target.closest?.("[data-creation-stat]");
+    if (statBtn) {
+      e.preventDefault();
+      e.stopPropagation();
+      changeCreationStat(statBtn.dataset.creationStat, Number(statBtn.dataset.delta || 0));
+      return;
+    }
+
+    const lobbyCard = e.target.closest?.(".player-lobby-card[data-player-id]");
+    if (lobbyCard) {
+      e.preventDefault();
+      e.stopPropagation();
+      loginPlayerCharacter(lobbyCard.dataset.playerId);
+      return;
+    }
+
+    const classDelete = e.target.closest?.("[data-delete-class]");
+    if (classDelete) {
+      e.preventDefault();
+      e.stopPropagation();
+      deleteCreationClass(classDelete.dataset.deleteClass);
+      return;
+    }
+
+    const levelBtn = e.target.closest?.("[data-level-player][data-level-stat]");
+    if (levelBtn) {
+      e.preventDefault();
+      e.stopPropagation();
+      const p = data.players.find(x=>x.id===levelBtn.dataset.levelPlayer);
+      if (!p) return;
+      selectedLevelPlayerId = p.id;
+      increaseStat(levelBtn.dataset.levelStat);
+      return;
+    }
+  }
+
+  function handleDelegatedChange(e){
+    const statInput = e.target.closest?.("[data-creation-stat-input]");
+    if (statInput) {
+      setCreationStatValue(statInput.dataset.creationStatInput, Number(statInput.value || 0));
+    }
+  }
+
+  function bindToastFeedback(){
+    document.querySelectorAll("button").forEach(btn => {
+      const txt = (btn.textContent || "").trim();
+      if (/저장|적용|추가|수정|불러오기|지급|초기화|구매|도전/.test(txt)) {
+        btn.addEventListener("click", () => {
+          setTimeout(() => showToast(`${txt} 처리 완료`), 120);
+        });
+      }
+    });
+  }
+
+  function setMode(mode) {
+    if (mode === "master" && data.access.role !== "master") {
+      requestMasterAccess();
+      return;
+    }
+    if (mode === "game" && data.access.role !== "master") {
+      showToast("마스터 권한이 필요합니다.");
+      return;
+    }
+    if (mode === "mode") {
+      data.access.role = "none";
+    }
+    data.mode = mode;
+    save();
+    renderAll();
+    window.scrollTo(0,0);
+  }
+
+  function renderAll() {
+    $("modeScreen").classList.toggle("hidden", data.mode !== "mode");
+    $("masterScreen").classList.toggle("hidden", !(data.mode === "master" && data.access.role === "master"));
+    $("gameScreen").classList.toggle("hidden", !(data.mode === "game" && data.access.role === "master"));
+    $("playerScreen")?.classList.toggle("hidden", !(data.mode === "player" && data.access.role === "player"));
+    renderSelects();
+    renderLists();
+    renderGame();
+    renderAccessStatus();
+    if (data.mode === "player") renderStandalonePlayerView();
+    renderAdvancedSystems();
+    renderCreationSystem();
+  }
+
+  function renderSelects() {
+    fillConditionSelects();
+    fillSkillOwnerSelect();
+    fillActorSelects();
+    fillMapSelect();
+    fillBossSelect();
+    fillNpcSelect();
+    fillMaterialSelect();
+    fillEnchantSelect();
+    fillSkillSelectForEnchant();
+    fillFumbleSelect();
+    fillShopSelects();
+    fillWorldEventConditionSelect();
+    fillTreeSkillSelect();
+    fillRuntimeShopSelects();
+    fillForgeSelects();
+  }
+
+  function fillConditionSelects() {
+    ["mapConditionSelect","skillCondition","runtimeConditionSelect","itemCondition"].forEach(id => {
+      const s=$(id); if(!s) return; s.innerHTML = `<option value="">선택 없음</option>`;
+      data.conditions.forEach(c=>s.add(new Option(c.name,c.id)));
+    });
+  }
+  function fillSkillOwnerSelect() { const s=$("skillOwner"); if(!s)return; s.innerHTML=""; getAllActors().forEach(a=>s.add(new Option(`[${typeName(a.type)}] ${a.name}`, actorValue(a.type,a.id)))); }
+  function fillActorSelects() {
+    ["checkActorSelect","checkTargetSelect","turnActorSelect"].forEach(id => {
+      const s=$(id); if(!s)return; const prev=s.value; s.innerHTML="";
+      getAllActors().forEach(a=>s.add(new Option(`[${typeName(a.type)}] ${a.name}`, actorValue(a.type,a.id))));
+      if(prev) s.value=prev;
+    });
+    renderRuntimeSkillSelect();
+  }
+  function fillMapSelect(){ const s=$("mapSelect"); if(!s)return; s.innerHTML=""; data.maps.forEach(m=>s.add(new Option(m.name,m.id))); }
+  function fillBossSelect(){ const s=$("bossSelect"); if(!s)return; s.innerHTML=""; data.bosses.forEach(b=>s.add(new Option(b.name,b.id))); }
+  function fillNpcSelect(){ const s=$("npcSelect"); if(!s)return; s.innerHTML=""; data.npcs.forEach(n=>s.add(new Option(`${n.name} / ${jobTitle(n.job)}`, n.id))); }
+  function fillMaterialSelect(){ const s=$("equipmentMaterial"); if(!s)return; s.innerHTML=`<option value="">소재 없음</option>`; data.materials.forEach(m=>s.add(new Option(m.name,m.id))); }
+  function fillEnchantSelect(){ const s=$("equipmentEnchant"); if(!s)return; s.innerHTML=`<option value="">인챈트 없음</option>`; data.enchants.forEach(e=>s.add(new Option(e.name,e.id))); }
+  function fillSkillSelectForEnchant(){ const s=$("enchantSkill"); if(!s)return; s.innerHTML=`<option value="">추가 스킬 없음</option>`; data.skills.forEach(sk=>s.add(new Option(sk.name,sk.id))); }
+  function fillFumbleSelect(){ const s=$("bossFumbleSelect"); if(!s)return; s.innerHTML=""; data.fumbles.forEach(f=>s.add(new Option(f.name,f.id))); }
+
+  function renderLists() {
+    renderMapList(); renderConditionList(); renderSkillList(); renderPlayerList(); renderNpcList(); renderNpcJobConfigList(); renderBossList(); renderMaterialList(); renderEnchantList(); renderEquipmentList(); renderItemList(); renderFumbleList(); renderShopList(); renderUpgradeRuleList(); renderWorldEventList(); renderEncounterList(); renderFactionList(); renderSkillTreeList(); renderSaveSlotList(); renderForgeConfigList();
+  }
+
+  function renderGame() {
+    renderMapView(); renderActiveBosses(); renderActiveNpcs(); renderPlayerCards(); renderTurns(); renderWorldState(); renderFactionView(); renderLog();
+  }
+
+  function readImage(e, cb) {
+    const file=e.target.files[0]; if(!file)return;
+    const reader=new FileReader(); reader.onload=ev=>cb(ev.target.result); reader.readAsDataURL(file);
+  }
+
+  function readStats(prefix) {
+    const o={}; COMMON_STATS.forEach(stat=>o[stat]=Number($(`${prefix}${stat}`)?.value||0)); return o;
+  }
+  function clearStats(prefix) { COMMON_STATS.forEach(stat=>{ const el=$(`${prefix}${stat}`); if(el) el.value=""; }); }
+  function setStats(prefix, stats) { COMMON_STATS.forEach(stat=>{ const el=$(`${prefix}${stat}`); if(el) el.value=stats?.[stat]??0; }); }
+  function clearInputs(ids) { ids.forEach(id=>{ const el=$(id); if(el) el.value=""; }); }
+
+  function addTempMapEffect() {
+    const cid=$("mapConditionSelect").value; if(!cid) return alert("상태이상을 선택하세요.");
+    const c=data.conditions.find(x=>x.id===cid);
+    tempMapEffects.push({conditionId:cid, everyTurns:Number($("mapEveryTurns").value||1), duration:Number($("mapConditionDuration").value||c.duration||1)});
+    renderTempMapEffects();
+  }
+  function renderTempMapEffects() {
+    const box=$("mapEffectPreview"); box.innerHTML="";
+    tempMapEffects.forEach((e,i)=>{ const c=data.conditions.find(x=>x.id===e.conditionId); box.insertAdjacentHTML("beforeend", `<div class="mini-item">${c?.name||"-"} / ${e.everyTurns}턴마다 / ${e.duration}턴 <button class="small danger" onclick="removeTempMapEffect(${i})">삭제</button></div>`); });
+  }
+  window.removeTempMapEffect=i=>{ tempMapEffects.splice(i,1); renderTempMapEffects(); };
+
+  function addMap() {
+    const name=$("mapName").value.trim(); if(!name)return alert("맵 이름을 입력하세요.");
+    data.maps.push({id:makeId(), name, desc:$("mapDesc").value, bgm:$("mapBgm").value, image:tempMapImage, effects:structuredClone(tempMapEffects)});
+    tempMapImage=""; tempMapEffects=[]; clearInputs(["mapName","mapDesc","mapBgm","mapEveryTurns","mapConditionDuration"]); renderTempMapEffects(); save(); renderAll();
+  }
+  function renderList(boxId, items, renderFn) {
+    const box = $(boxId);
+    if (!box) return;
+    box.innerHTML = items.length ? items.map(renderFn).join("") : '<p class="muted">항목이 없습니다.</p>';
+  }
+
+  function renderMapList() {
+    renderList("mapList", data.maps, m => `<div class="list-item"><div class="row-title">${esc(m.name)}</div><div class="row-meta">${esc(m.desc||"-")}<br>효과 ${m.effects?.length||0}개</div><button class="small danger" onclick="deleteMap('${m.id}')">삭제</button></div>`);
+  }
+  window.deleteMap=id=>{ if(confirm("맵 삭제?")){ data.maps=data.maps.filter(m=>m.id!==id); if(data.activeMapId===id)data.activeMapId=""; save(); renderAll(); } };
+  function loadMap() {
+    const id=$("mapSelect").value; const m=data.maps.find(x=>x.id===id); if(!m)return;
+    data.activeMapId=id;
+    if(m.image) pushScene(m.image);
+    playBgm(m.bgm);
+    save(); renderAll();
+  }
+  function renderMapView() {
+    const m=data.maps.find(x=>x.id===data.activeMapId);
+    $("currentMapInfo").innerHTML = m ? `<strong>${esc(m.name)}</strong><br>${esc(m.desc||"")}<br><br>맵 효과: ${(m.effects||[]).map(e=>{const c=data.conditions.find(x=>x.id===e.conditionId);return `${esc(c?.name||"-")} ${e.everyTurns}턴마다 ${e.duration}턴`;}).join("<br>") || "-"}` : "-";
+    $("mapDescView").textContent = m ? m.desc || "" : "";
+    const img=$("sceneImage"), ph=$("scenePlaceholder");
+    if(data.sceneHistory[0]) { img.src=data.sceneHistory[0]; img.style.display="block"; ph.style.display="none"; } else { img.style.display="none"; ph.style.display="block"; }
+    renderSceneHistory();
+  }
+  function pushScene(src) { if(!src)return; data.sceneHistory=[src, ...data.sceneHistory.filter(x=>x!==src)].slice(0,6); }
+  function renderSceneHistory(){ const box=$("sceneHistory"); box.innerHTML=""; data.sceneHistory.forEach(src=>box.insertAdjacentHTML("beforeend", `<img class="history-thumb" src="${src}" onclick="setScene('${src.replaceAll("'","\\'")}')">`)); }
+  window.setScene=src=>{ pushScene(src); save(); renderMapView(); };
+  function setupSceneDragDrop() {
+    const dz=$("dropZone"), input=$("sceneFileInput"); if(!dz)return;
+    dz.onclick=e=>{ if(e.target.closest?.(".main-scene-shop")) return; input.click(); };
+    input.onchange=e=>{ const f=e.target.files[0]; if(f) sceneFile(f); };
+    dz.ondragover=e=>{ e.preventDefault(); dz.classList.add("dragover"); };
+    dz.ondragleave=()=>dz.classList.remove("dragover");
+    dz.ondrop=e=>{ e.preventDefault(); dz.classList.remove("dragover"); const f=e.dataTransfer.files[0]; if(f) sceneFile(f); };
+  }
+  function sceneFile(file){ if(!file.type.startsWith("image/"))return alert("이미지 파일만 가능"); const r=new FileReader(); r.onload=e=>{ pushScene(e.target.result); save(); renderMapView(); }; r.readAsDataURL(file); }
+  function playBgm(src){ const a=$("bgmPlayer"); if(!a)return; if(!src){ a.removeAttribute("src"); return; } a.src=src; a.volume=.55; a.play().catch(()=>{}); }
+
+  function addCondition(){ const name=$("conditionName").value.trim(); if(!name)return alert("상태이상 이름"); data.conditions.push({id:makeId(), name, stat:$("conditionStat").value, effect:$("conditionEffect").value, value:Number($("conditionValue").value||0), duration:Number($("conditionDuration").value||1), desc:$("conditionDesc").value}); clearInputs(["conditionName","conditionValue","conditionDuration","conditionDesc"]); save(); renderAll(); }
+  function renderConditionList() {
+    renderList("conditionList", data.conditions, c => `<div class="list-item"><div class="row-title">${esc(c.name)}</div><div class="row-meta">${effectName(c.effect)} / ${STAT_LABELS[c.stat]} / ${c.value} / ${c.duration}턴</div><button class="small danger" onclick="deleteCondition('${c.id}')">삭제</button></div>`);
+  }
+  window.deleteCondition=id=>{ if(confirm("상태이상 삭제?")){ data.conditions=data.conditions.filter(c=>c.id!==id); save(); renderAll(); } };
+
+  function addSkill(){ const unassigned=$("skillUnassigned").checked; const owner=unassigned?null:findActor($("skillOwner").value); const name=$("skillName").value.trim(); if(!unassigned&&!owner)return alert("스킬 소유자 확인"); if(!name)return alert("스킬 이름 확인"); data.skills.push({id:makeId(), ownerType:owner?.type||"none", ownerId:owner?.id||"", forSale:$("skillForSale").checked, price:Number($("skillPrice").value||0), name, type:$("skillType").value, stat:$("skillStat").value, mpCost:Number($("skillMpCost").value||0), bonus:Number($("skillBonus").value||0), amount:$("skillAmount").value, conditionId:$("skillCondition").value, desc:$("skillDesc").value}); clearInputs(["skillName","skillPrice","skillMpCost","skillBonus","skillAmount","skillDesc"]); $("skillUnassigned").checked=false; $("skillForSale").checked=false; save(); renderAll(); }
+  function renderSkillList(){ const box=$("skillList"); if(!box)return; box.innerHTML=""; data.skills.forEach(s=>{ const o=findActor(actorValue(s.ownerType,s.ownerId)); box.insertAdjacentHTML("beforeend", `<div class="list-item"><div class="row-title">${esc(s.name)}</div><div class="row-meta">${s.ownerType==="none"?"미지급":esc(o?.actor.name||"?")} / ${skillName(s.type)} / ${STAT_LABELS[s.stat]} / MP ${s.mpCost||0} / 보정 ${s.bonus||0}${s.forSale?`<br>상점판매 가능 / ${s.price||0} Gold`:""}</div><button class="small danger" onclick="deleteSkill('${s.id}')">삭제</button></div>`); }); }
+  window.deleteSkill=id=>{ if(confirm("스킬 삭제?")){ data.skills=data.skills.filter(s=>s.id!==id); save(); renderAll(); } };
+
+  function addPlayer(){ const name=$("playerName").value.trim(); if(!name)return alert("플레이어 이름"); const st=readStats("player"); const maxHp=Number($("playerMaxHp").value||10+st.VIT*2); const maxMp=Number($("playerMaxMp").value||5+st.INT+st.MND); data.players.push({id:makeId(), name, level:Number($("playerLevel").value||1), exp:Number($("playerExp").value||0), nextExp:Number($("playerNextExp").value||100), statPoints:0, hp:Number($("playerHp").value||maxHp), maxHp, mp:Number($("playerMp").value||maxMp), maxMp, gold:Number($("playerGold").value||0), hype:Number($("playerHype").value||0), status:$("playerStatus").value||"정상", memo:$("playerMemo").value, portrait:tempPlayerPortrait, stats:st, conditions:[], disabledWeaponTurns:0}); tempPlayerPortrait=""; clearInputs(["playerName","playerLevel","playerExp","playerNextExp","playerGold","playerHype","playerHp","playerMaxHp","playerMp","playerMaxMp","playerStatus","playerMemo"]); clearStats("player"); save(); renderAll(); }
+  function renderPlayerList() {
+    renderList("playerList", data.players, p => `<div class="list-item"><div class="row-title">${esc(p.name)} Lv.${p.level}</div><div class="row-meta">EXP ${p.exp}/${p.nextExp} / 포인트 ${p.statPoints} / 고양감 ${p.hype||0}<br>HP ${p.hp}/${p.maxHp} MP ${p.mp}/${p.maxMp}</div><button class="small danger" onclick="deletePlayer('${p.id}')">삭제</button></div>`);
+  }
+  window.deletePlayer=id=>{ if(confirm("플레이어 삭제?")){ data.players=data.players.filter(p=>p.id!==id); save(); renderAll(); } };
+
+
+  function saveNpcJobConfig(){
+    const key=$("npcJobConfigSelect").value;
+    data.npcJobConfigs[key] = {
+      title: $("npcJobConfigTitle").value || jobTitle(key),
+      desc: $("npcJobConfigDesc").value || ""
+    };
+    save(); renderNpcJobConfigList(); alert("NPC 직업 설명 저장 완료");
+  }
+  function fillNpcJobConfigForm(){
+    const key=$("npcJobConfigSelect").value;
+    const cfg=data.npcJobConfigs?.[key] || {title:jobTitle(key), desc:""};
+    $("npcJobConfigTitle").value=cfg.title||jobTitle(key);
+    $("npcJobConfigDesc").value=cfg.desc||"";
+  }
+  function renderNpcJobConfigList(){
+    const box=$("npcJobConfigList"); if(!box)return; box.innerHTML="";
+    Object.entries(data.npcJobConfigs||{}).forEach(([key,cfg])=>{
+      box.insertAdjacentHTML("beforeend", `<div class="list-item"><div class="row-title">${esc(cfg.title||jobTitle(key))}</div><div class="row-meta">${esc(cfg.desc||"-")}</div></div>`);
+    });
+    fillNpcJobConfigForm();
+  }
+
+  function addNpc(){ const name=$("npcName").value.trim(); if(!name)return alert("NPC 이름"); data.npcs.push({id:makeId(), name, job:$("npcJob").value, portrait:tempNpcPortrait, hp:Number($("npcHp").value||0), maxHp:Number($("npcMaxHp").value||$("npcHp").value||1), def:Number($("npcDef").value||0), atk:Number($("npcAtk").value||0), status:$("npcStatus").value||"정상", skillMemo:$("npcSkillMemo").value, public:$("npcPublic").checked, stats:readStats("npc"), conditions:[], npcStats:{SUSPICION:Number($("npcSUSPICION").value||0),AFFECTION:Number($("npcAFFECTION").value||0),MADNESS:Number($("npcMADNESS").value||0),CORRUPTION:Number($("npcCORRUPTION").value||0)}}); tempNpcPortrait=""; save(); renderAll(); }
+  function renderNpcList() {
+    renderList("npcList", data.npcs, n => `<div class="list-item"><div class="row-title">${esc(n.name)} / ${jobTitle(n.job)}</div><div class="row-meta">HP ${n.hp}/${n.maxHp} / ${n.public?"공개":"비공개"}<br>${esc(n.skillMemo||"")}</div><button class="small danger" onclick="deleteNpc('${n.id}')">삭제</button></div>`);
+  }
+  window.deleteNpc=id=>{ if(confirm("NPC 삭제?")){ data.npcs=data.npcs.filter(n=>n.id!==id); save(); renderAll(); } };
+
+  function addTempBossFumble(){ const id=$("bossFumbleSelect").value; if(!id)return; if(!tempBossFumbles.includes(id)) tempBossFumbles.push(id); renderTempBossFumbles(); }
+  function renderTempBossFumbles(){ const box=$("bossFumblePreview"); box.innerHTML=""; tempBossFumbles.forEach((id,i)=>{ const f=data.fumbles.find(x=>x.id===id); box.insertAdjacentHTML("beforeend", `<div class="mini-item">${esc(f?.name||"-")} <button class="small danger" onclick="removeTempBossFumble(${i})">삭제</button></div>`); }); }
+  window.removeTempBossFumble=i=>{ tempBossFumbles.splice(i,1); renderTempBossFumbles(); };
+  function addBoss(){ const name=$("bossName").value.trim(); if(!name)return alert("보스 이름"); data.bosses.push({id:makeId(), name, hp:Number($("bossHp").value||100), maxHp:Number($("bossMaxHp").value||100), status:$("bossStatus").value||"정상", attackType:$("bossAttackType").value||"slash", memo:$("bossMemo").value, stats:readStats("boss"), conditions:[], fumbleIds:structuredClone(tempBossFumbles), reward:{exp:Number($("bossRewardExp").value||0), gold:Number($("bossRewardGold").value||0), itemName:$("bossDropItem").value, itemQty:Number($("bossDropQty").value||1), itemDesc:$("bossDropDesc").value}}); tempBossFumbles=[]; renderTempBossFumbles(); save(); renderAll(); }
+  function renderBossList() {
+    renderList("bossList", data.bosses, b => `<div class="list-item"><div class="row-title">${esc(b.name)}</div><div class="row-meta">HP ${b.hp}/${b.maxHp}<br><span class="attack-type-badge">${attackTypeName(b.attackType)}</span><br>펌블 ${b.fumbleIds?.length||0}개 / EXP ${b.reward.exp} Gold ${b.reward.gold}</div><button class="small danger" onclick="deleteBoss('${b.id}')">삭제</button></div>`);
+  }
+  window.deleteBoss=id=>{ if(confirm("보스 삭제?")){ data.bosses=data.bosses.filter(b=>b.id!==id); data.activeBossIds=data.activeBossIds.filter(x=>x!==id); save(); renderAll(); } };
+
+  function addMaterial(){ const name=$("materialName").value.trim(); if(!name)return alert("소재 이름"); data.materials.push({id:makeId(), name, durabilityBonus:Number($("materialDurability").value||0), stats:readStats("material"), desc:$("materialDesc").value}); clearInputs(["materialName","materialDurability","materialDesc"]); clearStats("material"); save(); renderAll(); }
+  function renderMaterialList() {
+    renderList("materialList", data.materials, m => `<div class="list-item"><div class="row-title">${esc(m.name)}</div><div class="row-meta">내구도 +${m.durabilityBonus}</div><button class="small danger" onclick="deleteMaterial('${m.id}')">삭제</button></div>`);
+  }
+  window.deleteMaterial=id=>{ data.materials=data.materials.filter(m=>m.id!==id); save(); renderAll(); };
+
+  function addEnchant(){ const name=$("enchantName").value.trim(); if(!name)return alert("인챈트 이름"); data.enchants.push({id:makeId(), name, stats:readStats("enchant"), debuffStat:$("enchantDebuff").value, skillId:$("enchantSkill").value, desc:$("enchantDesc").value}); clearInputs(["enchantName","enchantDesc"]); clearStats("enchant"); save(); renderAll(); }
+  function renderEnchantList() {
+    renderList("enchantList", data.enchants, e => `<div class="list-item"><div class="row-title">${esc(e.name)}</div><div class="row-meta">디버프 ${e.debuffStat?STAT_LABELS[e.debuffStat]:"없음"}</div><button class="small danger" onclick="deleteEnchant('${e.id}')">삭제</button></div>`);
+  }
+  window.deleteEnchant=id=>{ data.enchants=data.enchants.filter(e=>e.id!==id); save(); renderAll(); };
+
+  function addEquipment(){ const name=$("equipmentName").value.trim(); if(!name)return alert("장비 이름"); const mat=data.materials.find(m=>m.id===$("equipmentMaterial").value); const base=Number($("equipmentDurability").value||10); data.equipments.push({id:makeId(), name, type:$("equipmentType").value, attackType:$("equipmentAttackType").value||"slash", resists:{slash:Number($("resistSlash").value||0), pierce:Number($("resistPierce").value||0), blunt:Number($("resistBlunt").value||0), special:Number($("resistSpecial").value||0)}, materialId:$("equipmentMaterial").value, enchantId:$("equipmentEnchant").value, durability:base+(mat?.durabilityBonus||0), maxDurability:base+(mat?.durabilityBonus||0), enchantable:$("equipmentEnchantable").checked, image:tempEquipmentImage, desc:$("equipmentDesc").value, stats:readStats("equipment"), equippedBy:""}); tempEquipmentImage=""; clearInputs(["equipmentName","equipmentDurability","equipmentDesc","resistSlash","resistPierce","resistBlunt","resistSpecial"]); clearStats("equipment"); save(); renderAll(); }
+  function renderEquipmentList(){ const box=$("equipmentList"); if(!box)return; box.innerHTML=""; data.equipments.forEach(e=>{ const mat=data.materials.find(m=>m.id===e.materialId); const ench=data.enchants.find(x=>x.id===e.enchantId); box.insertAdjacentHTML("beforeend", `<div class="list-item"><div class="row-title">${esc(e.name)} [${EQUIP_SLOTS[e.type]}]</div><div class="row-meta">${esc(mat?.name||"소재 없음")} / ${esc(ench?.name||"인챈트 없음")}<br><span class="attack-type-badge">${e.type==="weapon"?attackTypeName(e.attackType):"방어구 내성"}</span><br>${resistText(e)}<br>내구도 ${e.durability}/${e.maxDurability} / 장착 ${esc(e.equippedBy||"-")}</div><button class="small danger" onclick="deleteEquipment('${e.id}')">삭제</button></div>`); }); }
+  window.deleteEquipment=id=>{ data.equipments=data.equipments.filter(e=>e.id!==id); save(); renderAll(); };
+
+  function addItem(){ const name=$("itemName").value.trim(); if(!name)return alert("아이템 이름"); data.items.push({id:makeId(), name, qty:Number($("itemQty").value||1), owner:$("itemOwner").value, image:tempItemImage, desc:$("itemDesc").value, effect:$("itemEffect").value, effectAmount:Number($("itemEffectAmount").value||0), conditionId:$("itemCondition").value, used:$("itemUsed").checked}); tempItemImage=""; clearInputs(["itemName","itemQty","itemOwner","itemDesc","itemEffectAmount"]); if($("itemUsed"))$("itemUsed").checked=false; save(); renderAll(); }
+  function renderItemList() {
+    renderList("itemList", data.items, i => `<div class="list-item">${i.image?`<img class="list-thumb" src="${i.image}">`:""}<div class="row-title">${esc(i.name)} x${i.qty}</div><div class="row-meta">보유자 ${esc(i.owner||"-")} / 효과 ${i.effect}</div><button class="small danger" onclick="deleteItem('${i.id}')">삭제</button></div>`);
+  }
+  window.deleteItem=id=>{ data.items=data.items.filter(i=>i.id!==id); save(); renderAll(); };
+
+  function addFumble(){ const name=$("fumbleName").value.trim(); if(!name)return alert("펌블 이름"); data.fumbles.push({id:makeId(), name, type:$("fumbleType").value, stat:$("fumbleStat").value, value:Number($("fumbleValue").value||0), duration:Number($("fumbleDuration").value||1), desc:$("fumbleDesc").value}); clearInputs(["fumbleName","fumbleValue","fumbleDuration","fumbleDesc"]); save(); renderAll(); }
+  $("addFumbleBtn").onclick=addFumble;
+  function renderFumbleList() {
+    renderList("fumbleList", data.fumbles, f => `<div class="list-item"><div class="row-title">${esc(f.name)}</div><div class="row-meta">${fumbleName(f.type)} / ${f.value} / ${f.duration}턴</div><button class="small danger" onclick="deleteFumble('${f.id}')">삭제</button></div>`);
+  }
+  window.deleteFumble=id=>{ data.fumbles=data.fumbles.filter(f=>f.id!==id); save(); renderAll(); };
+
+  function renderPlayerCards(){
+    const box=$("mainPlayerCards");
+    if(!box)return;
+    box.innerHTML="";
+    data.players.forEach(p=>{
+      const hp=getPercent(p.hp,p.maxHp), mp=getPercent(p.mp,p.maxMp), exp=getPercent(p.exp,p.nextExp);
+      const selected = data.playerSession?.currentPlayerId === p.id;
+      box.insertAdjacentHTML("beforeend", `<div class="player-main-card ${selected ? "selected-player-card" : ""}">
+        <div class="portrait-frame" data-action="level-modal" data-player-id="${p.id}" onclick="openLevelModal('${p.id}')">${p.portrait?`<img src="${p.portrait}">`:`<div class="portrait-placeholder">NO<br>PORTRAIT</div>`}</div>
+        <div>
+          <div class="player-name">${esc(p.name)}${selected ? " · 선택됨" : ""}</div>
+          <div class="level-badge">Lv.${p.level} / ${esc(p.className || "무직")} / 포인트 ${p.statPoints}</div>
+          <span class="hype-badge">고양감 ${p.hype||0}</span>
+          <div class="stat-line"><span>HP</span><span>${p.hp}/${p.maxHp}</span></div>
+          <div class="small-bar-frame"><div class="hp-bar hp" style="width:${hp}%"></div></div>
+          <div class="stat-line"><span>MP</span><span>${p.mp}/${p.maxMp}</span></div>
+          <div class="small-bar-frame"><div class="hp-bar mp" style="width:${mp}%"></div></div>
+          <div class="stat-line"><span>EXP</span><span>${p.exp}/${p.nextExp}</span></div>
+          <div class="small-bar-frame"><div class="hp-bar exp" style="width:${exp}%"></div></div>
+          <div class="player-extra">상태: ${renderStatus(p)}<br>Gold ${p.gold}<br>STR ${effStat(p,"STR")} / DEX ${effStat(p,"DEX")} / VIT ${effStat(p,"VIT")}</div>
+          <div class="player-card-actions">
+            <button onclick="changePlayerHpPrompt('${p.id}')">HP 변경</button>
+            <button onclick="changePlayerGoldPrompt('${p.id}')">골드 변경</button>
+            <button onclick="addPlayerConditionPrompt('${p.id}')">상태 추가</button>
+            <button onclick="removePlayerConditionPrompt('${p.id}')">상태 제거</button>
+            <button onclick="openInventory('${escAttr(p.name)}')">인벤토리 보기</button>
+            <button onclick="selectMainPlayerCharacter('${p.id}')">캐릭터 선택</button>
+            <button onclick="editPlayerCharacterPrompt('${p.id}')">캐릭터 수정</button>
+            <button class="danger" onclick="deletePlayerFromMain('${p.id}')">캐릭터 삭제</button>
+            <button onclick="openSkills('${p.id}')">스킬</button>
+          </div>
+        </div>
+      </div>`);
+    });
+  }
+  window.quickHp=(id,delta)=>{ const p=data.players.find(x=>x.id===id); if(!p)return; p.hp=Math.max(0,Math.min(p.maxHp,p.hp+delta)); save(); renderAll(); };
+  window.changePlayerHpPrompt=function(id){
+    const p=data.players.find(x=>x.id===id);
+    if(!p)return;
+    const input=prompt(`${p.name}의 HP 변경값을 입력하세요. 예: -5 또는 10`, "0");
+    if(input===null)return;
+    const delta=Number(input);
+    if(Number.isNaN(delta))return alert("숫자로 입력하세요.");
+    p.hp=Math.max(0,Math.min(Number(p.maxHp||0),Number(p.hp||0)+delta));
+    save();
+    renderAll();
+    showToast("HP 변경 완료");
+  };
+  window.changePlayerGoldPrompt=function(id){
+    const p=data.players.find(x=>x.id===id);
+    if(!p)return;
+    const input=prompt(`${p.name}의 골드 변경값을 입력하세요. 예: -20 또는 50`, "0");
+    if(input===null)return;
+    const delta=Number(input);
+    if(Number.isNaN(delta))return alert("숫자로 입력하세요.");
+    p.gold=Math.max(0,Number(p.gold||0)+delta);
+    save();
+    renderAll();
+    showToast("골드 변경 완료");
+  };
+  window.addPlayerConditionPrompt=function(id){
+    const p=data.players.find(x=>x.id===id);
+    if(!p)return;
+    if(!data.conditions.length){
+      const name=prompt("추가할 상태 이름을 입력하세요.", "상태이상");
+      if(!name)return;
+      p.conditions??=[];
+      p.conditions.push({id:makeId(), name, effect:"custom", value:0, duration:1, remainingShield:0});
+      syncStatus(p);
+      save();
+      renderAll();
+      return;
+    }
+    const list=data.conditions.map((c,i)=>`${i+1}. ${c.name}`).join("\n");
+    const input=prompt(`추가할 상태 번호를 입력하세요.\n${list}`, "1");
+    if(input===null)return;
+    const c=data.conditions[Number(input)-1];
+    if(!c)return alert("상태 번호를 확인하세요.");
+    applyCondition(p,c,c.duration);
+    save();
+    renderAll();
+    showToast("상태 추가 완료");
+  };
+  window.removePlayerConditionPrompt=function(id){
+    const p=data.players.find(x=>x.id===id);
+    if(!p)return;
+    const list=p.conditions||[];
+    if(!list.length)return alert("제거할 상태가 없습니다.");
+    const input=prompt(`제거할 상태 번호를 입력하세요.\n${list.map((c,i)=>`${i+1}. ${c.name}`).join("\n")}`, "1");
+    if(input===null)return;
+    const idx=Number(input)-1;
+    if(!list[idx])return alert("상태 번호를 확인하세요.");
+    list.splice(idx,1);
+    syncStatus(p);
+    save();
+    renderAll();
+    showToast("상태 제거 완료");
+  };
+  window.selectMainPlayerCharacter=function(id){
+    const p=data.players.find(x=>x.id===id);
+    if(!p)return;
+    data.playerSession.currentPlayerId=id;
+    save();
+    renderAll();
+    showToast(`${p.name} 선택 완료`);
+  };
+  window.editPlayerCharacterPrompt=function(id){
+    const p=data.players.find(x=>x.id===id);
+    if(!p)return;
+    const oldName=p.name;
+    const name=prompt("캐릭터 이름", p.name);
+    if(name===null)return;
+    const maxHp=prompt("최대 HP", p.maxHp);
+    if(maxHp===null)return;
+    const hp=prompt("현재 HP", p.hp);
+    if(hp===null)return;
+    const gold=prompt("골드", p.gold);
+    if(gold===null)return;
+    p.name=name.trim()||p.name;
+    if(oldName!==p.name){
+      data.items.forEach(i=>{ if(i.owner===oldName)i.owner=p.name; });
+      data.equipments.forEach(e=>{ if(e.equippedBy===oldName)e.equippedBy=p.name; });
+    }
+    p.maxHp=Math.max(1,Number(maxHp||p.maxHp));
+    p.hp=Math.max(0,Math.min(p.maxHp,Number(hp||p.hp)));
+    p.gold=Math.max(0,Number(gold||p.gold));
+    save();
+    renderAll();
+    showToast("캐릭터 수정 완료");
+  };
+  window.deletePlayerFromMain=function(id){
+    const p=data.players.find(x=>x.id===id);
+    if(!p)return;
+    if(!confirm(`${p.name} 캐릭터를 삭제할까요?`))return;
+    data.players=data.players.filter(x=>x.id!==id);
+    if(data.playerSession.currentPlayerId===id)data.playerSession.currentPlayerId="";
+    save();
+    renderAll();
+    showToast("캐릭터 삭제 완료");
+  };
+  function renderStatus(actor){ const list=actor.conditions||[]; if(!list.length)return `<span class="status-pill">정상</span>`; return list.map(c=>`<span class="status-pill">${esc(c.name)} ${c.effect==="shield"?c.remainingShield:c.duration+"턴"}</span>`).join(""); }
+
+  window.openInventory=function(playerName){ selectedInventoryPlayerName=playerName; $("inventoryModal").classList.remove("hidden"); $("inventoryTitle").textContent=`${playerName} 인벤토리`; renderInventory(); };
+  function renderInventory(){ const player=data.players.find(p=>p.name===selectedInventoryPlayerName); const content=$("inventoryContent"); const slots=$("equipmentSlots"); content.innerHTML=""; slots.innerHTML=""; data.items.filter(i=>i.owner===selectedInventoryPlayerName||i.owner==="파티 공용").forEach(i=>content.insertAdjacentHTML("beforeend", `<div class="inventory-item"><strong>${esc(i.name)} x${i.qty}</strong><p>${esc(i.desc||"-")}</p><button onclick="useItem('${i.id}')">사용</button></div>`)); Object.entries(EQUIP_SLOTS).forEach(([slot,label])=>{ const eq=data.equipments.find(e=>e.equippedBy===selectedInventoryPlayerName&&e.type===slot); slots.insertAdjacentHTML("beforeend", `<div class="equipment-slot ${eq?"equipped":""}"><strong>${label}</strong>${eq?.image?`<img class="equipment-img" src="${eq.image}">`:""}<p>${eq?`${esc(eq.name)}<br>${eq.type==="weapon"?attackTypeName(eq.attackType):resistText(eq)}<br>내구도 ${eq.durability}/${eq.maxDurability}`:"비어 있음"}</p>${eq?`<button onclick="unequip('${eq.id}')">해제</button>`:""}</div>`); }); content.insertAdjacentHTML("beforeend", `<h3>장착 가능 장비</h3>`); data.equipments.filter(e=>!e.equippedBy).forEach(e=>content.insertAdjacentHTML("beforeend", `<div class="inventory-item"><strong>${esc(e.name)} [${EQUIP_SLOTS[e.type]}]</strong><p>${e.type==="weapon"?attackTypeName(e.attackType):resistText(e)}<br>내구도 ${e.durability}/${e.maxDurability}</p><button onclick="equip('${e.id}')">장착</button></div>`)); }
+  window.equip=id=>{ const eq=data.equipments.find(e=>e.id===id); if(!eq)return; data.equipments.filter(e=>e.equippedBy===selectedInventoryPlayerName&&e.type===eq.type).forEach(e=>e.equippedBy=""); eq.equippedBy=selectedInventoryPlayerName; save(); renderInventory(); renderPlayerCards(); };
+  window.unequip=id=>{ const eq=data.equipments.find(e=>e.id===id); if(eq)eq.equippedBy=""; save(); renderInventory(); renderPlayerCards(); };
+  window.useItem=id=>{ const item=data.items.find(i=>i.id===id); const p=data.players.find(x=>x.name===selectedInventoryPlayerName); if(!item||!p)return; if(item.effect==="heal") p.hp=Math.min(p.maxHp,p.hp+item.effectAmount); if(item.effect==="mpHeal") p.mp=Math.min(p.maxMp,p.mp+item.effectAmount); if(item.effect==="condition"){ const c=data.conditions.find(x=>x.id===item.conditionId); if(c) applyCondition(p,c,c.duration); } item.qty-=1; if(item.qty<=0)data.items=data.items.filter(i=>i.id!==id); save(); renderInventory(); renderPlayerCards(); };
+
+  window.openSkills=function(playerId){ const p=data.players.find(x=>x.id===playerId); if(!p)return; $("skillModal").classList.remove("hidden"); $("skillModalTitle").textContent=`${p.name} 스킬`; const box=$("skillModalContent"); box.innerHTML=""; const skills=data.skills.filter(s=>s.ownerType==="player"&&s.ownerId===playerId); if(!skills.length)box.innerHTML=`<p class="muted">스킬 없음</p>`; skills.forEach(s=>box.insertAdjacentHTML("beforeend", `<div class="list-item"><div class="row-title">${esc(s.name)}</div><div class="row-meta">${skillName(s.type)} / ${STAT_LABELS[s.stat]} / MP ${s.mpCost}<br>${esc(s.desc||"")}</div></div>`)); };
+  window.openLevelModal=function(playerId){ selectedLevelPlayerId=playerId; const p=data.players.find(x=>x.id===playerId); if(!p)return; $("levelModal").classList.remove("hidden"); $("levelModalTitle").textContent=`${p.name} 스탯 강화`; $("levelModalInfo").textContent=`사용 가능 포인트: ${p.statPoints}`; const box=$("levelStatButtons"); box.innerHTML=""; COMMON_STATS.forEach(stat=>box.insertAdjacentHTML("beforeend", `<button class="level-stat-btn" data-level-player="${p.id}" data-level-stat="${stat}" onclick="increaseStat('${stat}')">${STAT_LABELS[stat]} +1</button>`)); };
+  window.increaseStat=stat=>{ const p=data.players.find(x=>x.id===selectedLevelPlayerId); if(!p)return; if(p.statPoints<=0)return alert("스탯 포인트 없음"); p.stats[stat]++; p.statPoints--; if(stat==="VIT"){p.maxHp+=2;p.hp+=2;} if(stat==="INT"||stat==="MND"){p.maxMp+=1;p.mp+=1;} save(); renderAll(); openLevelModal(p.id); };
+
+  function loadActiveBoss(){ const id=$("bossSelect").value; if(id&&!data.activeBossIds.includes(id)) data.activeBossIds.push(id); save(); renderActiveBosses(); }
+  function renderActiveBosses(){ const box=$("activeBossArea"); if(!box)return; box.innerHTML=""; data.activeBossIds.forEach(id=>{ const b=data.bosses.find(x=>x.id===id); if(!b)return; const hp=getPercent(b.hp,b.maxHp); box.insertAdjacentHTML("beforeend", `<div class="boss-card-mini"><h3>${esc(b.name)}</h3><span class="attack-type-badge">${attackTypeName(b.attackType)}</span><div>${renderStatus(b)}</div><div class="hp-frame"><div class="hp-bar hp" style="width:${hp}%"></div></div><div class="stat-line"><span>${b.hp}/${b.maxHp}</span><span>${hp}%</span></div><button class="small" onclick="grantBossReward('${b.id}')">보상 지급</button><button class="small danger" onclick="hideBoss('${b.id}')">숨김</button></div>`); }); }
+  window.hideBoss=id=>{ data.activeBossIds=data.activeBossIds.filter(x=>x!==id); save(); renderActiveBosses(); };
+
+  function loadActiveNpc(){ const id=$("npcSelect").value; if(id&&!data.activeNpcIds.includes(id)) data.activeNpcIds.push(id); save(); renderAll(); }
+  function renderActiveNpcs(){ 
+    const box=$("activeNpcArea"); 
+    if(!box)return; 
+    box.innerHTML=""; 
+    data.activeNpcIds.forEach(id=>{ 
+      const n=data.npcs.find(x=>x.id===id); 
+      if(!n)return; 
+      const cfg=data.npcJobConfigs?.[n.job]||{title:jobTitle(n.job), desc:""}; 
+      const isMerchant = n.job==="merchant" || n.job==="상인";
+      const isForge = n.job==="repair" || n.job==="강화/수리";
+      const shopBtn = isMerchant ? `<button class="small" onclick="openMainSceneShop('${n.id}')">상점 열기</button>` : "";
+      const forgeBtn = isForge ? `<button class="small" onclick="openMainSceneForge('${n.id}')">대장간 열기</button>` : "";
+      box.insertAdjacentHTML("beforeend", `<div class="npc-card-mini">${n.portrait?`<img src="${n.portrait}">`:""}<h3>${esc(n.name)}</h3><span class="job-badge">${esc(cfg.title||jobTitle(n.job))}</span><p class="muted">상태: ${esc(n.status||"정상")}</p><button class="small" onclick="toggleNpcJob('${n.id}')">직업 창</button><button class="small danger" onclick="hideNpc('${n.id}')">숨김</button><div id="npcJobPanel-${n.id}" class="npc-job-panel hidden">${esc(cfg.desc||"-")}<br>${shopBtn}${forgeBtn}</div></div>`); 
+    }); 
+  }
+  window.hideNpc=id=>{ data.activeNpcIds=data.activeNpcIds.filter(x=>x!==id); save(); renderAll(); };
+  window.toggleNpcJob=id=>{
+    const el=$(`npcJobPanel-${id}`);
+    if(el) el.classList.toggle("hidden");
+    const n=data.npcs.find(x=>x.id===id);
+    if(n && (n.job==="merchant" || n.job==="상인")) openMainSceneShop(id);
+    if(n && (n.job==="repair" || n.job==="강화/수리")) openMainSceneForge(id);
+  };
+
+  window.grantBossReward=id=>{ const b=data.bosses.find(x=>x.id===id); const p=data.players[0]; if(!b||!p)return alert("플레이어 없음"); giveReward(p,b.reward,`보스 보상 ${b.name}`); };
+
+  function rollD20(){ const mod=Number($("modifierInput").value||0); const dice=Math.floor(Math.random()*20)+1; const total=dice+mod; $("checkDiceInput").value=dice; $("diceResult").classList.remove("critical","fumble"); let text=`d20(${dice}) + 보정(${mod}) = ${total}`; if(dice===20){ text+="\n크리티컬!"; $("diceResult").classList.add("critical"); } if(dice===1){ text+="\n펌블!"; $("diceResult").classList.add("fumble"); triggerFumble(); } $("diceResult").textContent=text; addLog(text); }
+  function triggerFumble(){ const actor=findActor($("checkActorSelect").value); const target=findActor($("checkTargetSelect").value); if(!actor)return; const boss=target?.type==="boss"?target.actor:data.activeBossIds.map(id=>data.bosses.find(b=>b.id===id)).find(Boolean); const fIds=boss?.fumbleIds||[]; if(!fIds.length)return addLog("펌블: 적용할 보스 펌블 효과 없음"); const f=data.fumbles.find(x=>x.id===fIds[Math.floor(Math.random()*fIds.length)]); if(f) applyFumble(actor.actor, f); }
+  function applyFumble(actor,f){ let log=`펌블 효과 [${f.name}] → ${actor.name}: `; if(f.type==="weaponDurability") changeDurability(actor.name,"weapon",f.value); if(f.type==="armorDurability") ["helmet","armor","gloves","boots"].forEach(s=>changeDurability(actor.name,s,f.value)); if(f.type==="allyDamage"){ const p=data.players[0]; if(p){p.hp=Math.max(0,p.hp-Math.abs(f.value)); log+=`${p.name} 피해 ${Math.abs(f.value)}`;} } if(f.type==="statDown"){ applyCondition(actor,{id:makeId(),name:f.name,stat:f.stat,effect:"statDown",value:Math.abs(f.value),duration:f.duration},f.duration); } if(f.type==="weaponDisabled"){ actor.disabledWeaponTurns=Math.max(actor.disabledWeaponTurns||0,f.duration); log+=`무기 사용불가 ${f.duration}턴`; } if(f.type==="hpDown"){ actor.hp=Math.max(0,actor.hp-Math.abs(f.value)); log+=`HP ${Math.abs(f.value)} 감소`; } if(f.type==="maxHpDown"){ actor.maxHp=Math.max(1,actor.maxHp-Math.abs(f.value)); actor.hp=Math.min(actor.hp,actor.maxHp); log+=`최대 HP ${Math.abs(f.value)} 감소`; } addLog(log); save(); renderAll(); }
+  function changeDurability(owner,slot,delta){ const eq=data.equipments.find(e=>e.equippedBy===owner&&e.type===slot); if(eq) eq.durability=Math.max(0,Math.min(eq.maxDurability,eq.durability+delta)); }
+
+  function runSkillCheck(){ const source=findActor($("checkActorSelect").value), target=findActor($("checkTargetSelect").value); if(!source||!target)return alert("시전자/대상자 확인"); const type=$("skillSelect").value, stat=$("checkStatSelect").value, attackType=$("attackTypeSelect")?.value||getAttackTypeFromActor(source), dice=Number($("checkDiceInput").value||0), bonus=Number($("checkBonusInput").value||0), hypeUse=Number($("hypeUseInput").value||0); const val=effStat(source.actor,stat); if(hypeUse>0){ if(source.type!=="player") return alert("고양감은 플레이어만 사용할 수 있습니다."); if((source.actor.hype||0)<hypeUse) return alert("고양감 부족"); source.actor.hype-=hypeUse; } const total=dice+val+bonus+hypeUse; const rawAmount=$("effectAmountInput").value===""?total:Number($("effectAmountInput").value); const baseDefense= type==="damage" ? Number(target.actor.def||0) : 0; const resistDefense= type==="damage" ? getResistanceDefense(target.actor, attackType) : 0; const defense=baseDefense+resistDefense; const amount= type==="damage" ? Math.max(0, rawAmount-defense) : rawAmount; let result=`${source.actor.name} → ${target.actor.name}\n공격유형: ${attackTypeName(attackType)}\n${dice}+${STAT_LABELS[stat]}(${val})+보정(${bonus})+고양감(${hypeUse}) = ${total}`; const skill=data.skills.find(s=>s.id===$("runtimeSkillSelect").value); if(skill&&source.actor.mp!==undefined){ if(source.actor.mp<skill.mpCost)return alert("MP 부족"); source.actor.mp-=skill.mpCost; result+=`\nMP ${skill.mpCost} 소모`; } if(type==="damage"){ const beforeHp = Number(target.actor.hp || 0); const blocked=damage(target.actor,amount); if(Number(target.actor.hp||0)===beforeHp && amount>blocked){ target.actor.hp=Math.max(0,beforeHp-Math.max(0,amount-blocked)); } result+=`\n기본 피해 ${rawAmount} - 기본방어 ${baseDefense} - ${attackTypeName(attackType)} 내성 ${resistDefense} = ${amount}\n최종 피해 ${Math.max(0,amount-blocked)} / 보호막 ${blocked} 흡수`; damageEquipment(source.actor.name,"weapon",-1); damageArmorByAttack(target.actor.name,attackType,-1); } if(type==="heal"){ target.actor.hp=Math.min(target.actor.maxHp,target.actor.hp+amount); result+=`\n회복 ${amount}`; } if(type==="status"){ const c=data.conditions.find(x=>x.id===$("runtimeConditionSelect").value); if(c){ applyCondition(target.actor,c,c.duration); result+=`\n${c.name} 적용`; } } if(type==="cleanse"){ target.actor.conditions=[]; target.actor.status="정상"; result+="\n상태이상 해제"; } $("statCheckResult").textContent=result; addLog(result); $("hypeUseInput").value=""; save(); renderAll(); }
+  function damage(actor,amount){
+    let dmg = Math.max(0, Number(amount || 0));
+    let blocked = 0;
+    actor.conditions = actor.conditions || [];
+    actor.conditions.forEach(c => {
+      if (c.effect === "shield" && dmg > 0) {
+        const b = Math.min(Number(c.remainingShield || 0), dmg);
+        c.remainingShield = Number(c.remainingShield || 0) - b;
+        dmg -= b;
+        blocked += b;
+      }
+    });
+    actor.conditions = actor.conditions.filter(c => c.effect !== "shield" || Number(c.remainingShield || 0) > 0);
+    actor.hp = Math.max(0, Number(actor.hp || 0) - dmg);
+    syncStatus(actor);
+    return blocked;
+  }
+  function damageEquipment(owner,slot,delta){ changeDurability(owner,slot,delta); }
+  function damageArmorByAttack(owner,attackType,delta){ ["helmet","armor","gloves","boots"].forEach(slot=>{ const eq=data.equipments.find(e=>e.equippedBy===owner&&e.type===slot); if(eq && Number(eq.resists?.[attackType]||0)>0){ eq.durability=Math.max(0,Math.min(eq.maxDurability,eq.durability+delta)); } }); }
+  function getAttackTypeFromActor(info){ if(!info)return "slash"; if(info.type==="boss") return info.actor.attackType||"slash"; if(info.type==="player"){ const weapon=data.equipments.find(e=>e.equippedBy===info.actor.name&&e.type==="weapon"); return weapon?.attackType||"slash"; } return info.actor.attackType||"slash"; }
+  function autoAttackTypeFromActor(){ const info=findActor($("checkActorSelect")?.value); const sel=$("attackTypeSelect"); if(info&&sel) sel.value=getAttackTypeFromActor(info); }
+  function getResistanceDefense(actor,attackType){ if(!actor?.name)return 0; return data.equipments.filter(e=>e.equippedBy===actor.name&&e.type!=="weapon").reduce((sum,e)=>sum+Number(e.resists?.[attackType]||0),0); }
+  function resistText(e){ const r=e.resists||{}; return `<span class="resist-line">참격 ${r.slash||0} / 관통 ${r.pierce||0} / 타격 ${r.blunt||0} / 특수 ${r.special||0}</span>`; }
+
+  function renderRuntimeSkillSelect(){ const sel=$("runtimeSkillSelect"); if(!sel)return; const actor=$("checkActorSelect").value; sel.innerHTML=`<option value="">직접 설정</option>`; data.skills.filter(s=>actorValue(s.ownerType,s.ownerId)===actor).forEach(s=>sel.add(new Option(s.name,s.id))); autoAttackTypeFromActor(); }
+  function applyRuntimeSkill(){ const s=data.skills.find(x=>x.id===$("runtimeSkillSelect").value); if(!s)return; $("skillSelect").value=s.type; $("checkStatSelect").value=s.stat; $("effectAmountInput").value=s.amount; $("runtimeConditionSelect").value=s.conditionId||""; $("checkBonusInput").value = Number(s.bonus||0); }
+
+  function addTurn(){ const a=findActor($("turnActorSelect").value); if(!a)return; data.turns.push({id:makeId(),type:a.type,actorId:a.id,name:a.actor.name,init:Number($("turnInitInput").value||0)}); data.turns.sort((x,y)=>y.init-x.init); data.currentTurn=0; save(); renderTurns(); }
+  function nextTurn(){ if(!data.turns.length)return; data.currentTurn=(data.currentTurn+1)%data.turns.length; data.round++; data.worldState.turn++; const a=findActor(actorValue(data.turns[data.currentTurn].type,data.turns[data.currentTurn].actorId)); if(a) processTicks(a.actor); processMapEffects(); processWorldEvents(); save(); renderAll(); }
+  function renderTurns(){ const box=$("turnList"); if(!box)return; box.innerHTML=""; data.turns.forEach((t,i)=>{ const li=document.createElement("li"); if(i===data.currentTurn)li.classList.add("active"); li.innerHTML=`<strong>${esc(t.name)}</strong> / ${typeName(t.type)} / 선공 ${t.init}`; box.appendChild(li); }); }
+  function processTicks(actor){ (actor.conditions||[]).forEach(c=>{ if(c.effect==="dot"){ damage(actor,c.value); addLog(`${actor.name} ${c.name}: 턴 피해 ${c.value}`); } if(c.effect==="hot"){ actor.hp=Math.min(actor.maxHp,actor.hp+c.value); addLog(`${actor.name} ${c.name}: 턴 회복 ${c.value}`); } c.duration--; }); actor.conditions=(actor.conditions||[]).filter(c=>c.duration>0&&(c.effect!=="shield"||c.remainingShield>0)); if(actor.disabledWeaponTurns>0)actor.disabledWeaponTurns--; syncStatus(actor); }
+  function processMapEffects(){ const m=data.maps.find(x=>x.id===data.activeMapId); if(!m)return; (m.effects||[]).forEach(e=>{ if(data.round % e.everyTurns===0){ const c=data.conditions.find(x=>x.id===e.conditionId); if(c) data.players.forEach(p=>{ applyCondition(p,c,e.duration); addLog(`맵 효과 ${m.name}: ${p.name}에게 ${c.name} 적용`); }); } }); }
+  function applyCondition(actor,template,duration){ actor.conditions??=[]; const c={id:makeId(), templateId:template.id, name:template.name, stat:template.stat, effect:template.effect, value:Number(template.value||0), duration:Number(duration||template.duration||1), remainingShield:template.effect==="shield"?Number(template.value||0):0, desc:template.desc||""}; actor.conditions.push(c); syncStatus(actor); }
+  function syncStatus(actor){ actor.status=(actor.conditions||[]).length ? actor.conditions.map(c=>c.name).join(", ") : "정상"; }
+  function effStat(actor,stat){ let v=Number(actor.stats?.[stat]||0); data.equipments.filter(e=>e.equippedBy===actor.name).forEach(e=>{ v+=Number(e.stats?.[stat]||0); const m=data.materials.find(x=>x.id===e.materialId); if(m)v+=Number(m.stats?.[stat]||0); const ench=data.enchants.find(x=>x.id===e.enchantId); if(ench)v+=Number(ench.stats?.[stat]||0); }); (actor.conditions||[]).forEach(c=>{ if(c.stat===stat&&c.effect==="statUp")v+=c.value; if(c.stat===stat&&c.effect==="statDown")v-=c.value; }); return v; }
+
+  function loadMapImageToView(src){ pushScene(src); save(); renderMapView(); }
+  function endCombat(){ if(!confirm("전투 종료? 턴과 보스 표시를 초기화합니다."))return; data.turns=[]; data.currentTurn=0; data.activeBossIds=[]; save(); renderAll(); }
+  function giveReward(player,reward,reason){ reward??={}; addExp(player,Number(reward.exp||0)); player.gold+=Number(reward.gold||0); if(reward.itemName){ data.items.push({id:makeId(),name:reward.itemName,qty:Number(reward.itemQty||1),owner:player.name,desc:reward.itemDesc||"",effect:"none",effectAmount:0,conditionId:"",used:false}); } addLog(`${reason} → ${player.name}: EXP ${reward.exp||0}, Gold ${reward.gold||0}`); save(); renderAll(); }
+  function addExp(p,amount){ p.exp+=amount; while(p.exp>=p.nextExp){ p.exp-=p.nextExp; p.level++; p.statPoints++; p.nextExp=Math.ceil(p.nextExp*1.5); addLog(`${p.name} 레벨업! Lv.${p.level}, 스탯 포인트 +1`); } }
+
+
+  function fillShopSelects(){
+    const npcSel=$("shopNpcSelect"); if(npcSel){ npcSel.innerHTML=""; data.npcs.filter(n=>n.job==="merchant"||n.job==="enchanter"||n.job==="repair"||n.job==="god").forEach(n=>npcSel.add(new Option(`${n.name} / ${jobTitle(n.job)}`, n.id))); }
+    fillShopGoodsSelect();
+  }
+  function fillShopGoodsSelect(){
+    const s=$("shopGoodsSelect"); if(!s)return; s.innerHTML="";
+    const type=$("shopGoodsType")?.value||"item";
+    const arr = type==="item" ? data.items : type==="equipment" ? data.equipments : data.skills.filter(sk=>sk.forSale||sk.ownerType==="none");
+    arr.forEach(x=>s.add(new Option(x.name, x.id)));
+  }
+  function addShopGoods(){
+    const npcId=$("shopNpcSelect").value, type=$("shopGoodsType").value, goodsId=$("shopGoodsSelect").value;
+    if(!npcId||!goodsId) return alert("NPC와 상품을 선택하세요.");
+    data.shops.push({id:makeId(), npcId, type, goodsId, price:Number($("shopGoodsPrice").value||0), stock:$("shopGoodsStock").value===""?null:Number($("shopGoodsStock").value)});
+    clearInputs(["shopGoodsPrice","shopGoodsStock"]); save(); renderAll();
+  }
+  function renderShopList(){
+    const box=$("shopList"); if(!box)return; box.innerHTML="";
+    data.shops.forEach(g=>{
+      const npc=data.npcs.find(n=>n.id===g.npcId);
+      const goods=getGoods(g.type,g.goodsId);
+      box.insertAdjacentHTML("beforeend", `<div class="list-item"><div class="row-title">${esc(goods?.name||"?")}</div><div class="row-meta">${esc(npc?.name||"?")} / ${shopTypeName(g.type)} / ${g.price} Gold / 재고 ${g.stock??"무제한"}</div><button class="small danger" onclick="deleteShopGoods('${g.id}')">삭제</button></div>`);
+    });
+  }
+  window.deleteShopGoods=id=>{ data.shops=data.shops.filter(s=>s.id!==id); save(); renderAll(); };
+
+  function addUpgradeRule(){
+    data.upgradeRules.push({id:makeId(), level:Number($("upgradeLevel").value||1), success:Number($("upgradeSuccess").value||100), cost:Number($("upgradeCost").value||0), statBonus:Number($("upgradeStatBonus").value||1), durabilityPenalty:Number($("upgradeDurabilityPenalty").value||0), breakable:$("upgradeBreakable").checked});
+    clearInputs(["upgradeLevel","upgradeSuccess","upgradeCost","upgradeStatBonus","upgradeDurabilityPenalty"]); $("upgradeBreakable").checked=false; save(); renderAll();
+  }
+  function renderUpgradeRuleList(){
+    const box=$("upgradeRuleList"); if(!box)return; box.innerHTML="";
+    data.upgradeRules.sort((a,b)=>a.level-b.level).forEach(r=>box.insertAdjacentHTML("beforeend", `<div class="list-item"><div class="row-title">+${r.level}</div><div class="row-meta">성공 ${r.success}% / 비용 ${r.cost} / 스탯 +${r.statBonus} / 실패 내구도 -${r.durabilityPenalty} ${r.breakable?"/ 파괴가능":""}</div><button class="small danger" onclick="deleteUpgradeRule('${r.id}')">삭제</button></div>`));
+  }
+  window.deleteUpgradeRule=id=>{ data.upgradeRules=data.upgradeRules.filter(r=>r.id!==id); save(); renderAll(); };
+
+  function fillWorldEventConditionSelect(){ const s=$("worldEventCondition"); if(!s)return; s.innerHTML=`<option value="">상태이상 없음</option>`; data.conditions.forEach(c=>s.add(new Option(c.name,c.id))); }
+  function addWorldEvent(){
+    data.worldEvents.push({id:makeId(), name:$("worldEventName").value||"월드 이벤트", type:$("worldEventType").value, every:Number($("worldEventEvery").value||1), value:Number($("worldEventValue").value||0), conditionId:$("worldEventCondition").value, text:$("worldEventText").value});
+    clearInputs(["worldEventName","worldEventEvery","worldEventValue","worldEventText"]); save(); renderAll();
+  }
+  function renderWorldEventList() {
+    renderList("worldEventList", data.worldEvents, e => `<div class="list-item"><div class="row-title">${esc(e.name)}</div><div class="row-meta">${worldEventName(e.type)} / ${e.every}턴마다 / ${e.value}</div><button class="small danger" onclick="deleteWorldEvent('${e.id}')">삭제</button></div>`);
+  }
+  window.deleteWorldEvent=id=>{ data.worldEvents=data.worldEvents.filter(e=>e.id!==id); save(); renderAll(); };
+
+  function addEncounter(){ data.encounters.push({id:makeId(), name:$("encounterName").value||"랜덤 이벤트", weight:Number($("encounterWeight").value||1), desc:$("encounterDesc").value}); clearInputs(["encounterName","encounterWeight","encounterDesc"]); save(); renderAll(); }
+  function renderEncounterList() {
+    renderList("encounterList", data.encounters, e => `<div class="list-item"><div class="row-title">${esc(e.name)}</div><div class="row-meta">가중치 ${e.weight}<br>${esc(e.desc||"")}</div><button class="small danger" onclick="deleteEncounter('${e.id}')">삭제</button></div>`);
+  }
+  window.deleteEncounter=id=>{ data.encounters=data.encounters.filter(e=>e.id!==id); save(); renderAll(); };
+
+  function addFaction(){ data.factions.push({id:makeId(), name:$("factionName").value||"세력", rep:Number($("factionRep").value||0), desc:$("factionDesc").value}); clearInputs(["factionName","factionRep","factionDesc"]); save(); renderAll(); }
+  function renderFactionList() {
+    renderList("factionList", data.factions, f => `<div class="list-item"><div class="row-title">${esc(f.name)}</div><div class="row-meta">평판 ${f.rep}<br>${esc(f.desc||"")}</div><button class="small danger" onclick="deleteFaction('${f.id}')">삭제</button></div>`);
+  }
+  window.deleteFaction=id=>{ data.factions=data.factions.filter(f=>f.id!==id); save(); renderAll(); };
+  function renderFactionView(){ const box=$("factionView"); if(!box)return; box.innerHTML=data.factions.map(f=>`<div><strong>${esc(f.name)}</strong>: <span class="${f.rep>=0?"reputation-good":"reputation-bad"}">${f.rep}</span></div>`).join("")||"-"; }
+
+  let tempTreeSkills=[];
+  function fillTreeSkillSelect(){ const s=$("treeSkillSelect"); if(!s)return; s.innerHTML=""; data.skills.forEach(sk=>s.add(new Option(`${sk.name}${sk.ownerType==="none"?" / 미지급":""}`, sk.id))); }
+  function addTempTreeSkill(){ const id=$("treeSkillSelect").value; if(!id)return; tempTreeSkills.push({skillId:id, reqLevel:Number($("treeSkillReqLevel").value||1)}); renderTempTreeSkills(); }
+  function renderTempTreeSkills(){ const box=$("treeSkillPreview"); if(!box)return; box.innerHTML=""; tempTreeSkills.forEach((n,i)=>{ const sk=data.skills.find(s=>s.id===n.skillId); box.insertAdjacentHTML("beforeend", `<div class="mini-item">${esc(sk?.name||"?")} / 요구 Lv.${n.reqLevel} <button class="small danger" onclick="removeTempTreeSkill(${i})">삭제</button></div>`); }); }
+  window.removeTempTreeSkill=i=>{ tempTreeSkills.splice(i,1); renderTempTreeSkills(); };
+  function addSkillTree(){ const name=$("treeName").value||"스킬 트리"; data.skillTrees.push({id:makeId(), name, nodes:structuredClone(tempTreeSkills)}); tempTreeSkills=[]; clearInputs(["treeName","treeSkillReqLevel"]); renderTempTreeSkills(); save(); renderAll(); }
+  function renderSkillTreeList() {
+    renderList("skillTreeList", data.skillTrees, t => `<div class="list-item"><div class="row-title">${esc(t.name)}</div><div class="row-meta">${t.nodes.length}개 스킬</div><button class="small danger" onclick="deleteSkillTree('${t.id}')">삭제</button></div>`);
+  }
+  window.deleteSkillTree=id=>{ data.skillTrees=data.skillTrees.filter(t=>t.id!==id); save(); renderAll(); };
+
+  function saveToSlot(){ const name=$("saveSlotName").value.trim(); if(!name)return alert("슬롯 이름을 입력하세요."); data.saveSlots[name]=JSON.parse(JSON.stringify({...data, saveSlots: data.saveSlots})); save(); renderSaveSlotList(); }
+  function renderSaveSlotList(){ const box=$("saveSlotList"); if(!box)return; box.innerHTML=""; Object.keys(data.saveSlots||{}).forEach(name=>box.insertAdjacentHTML("beforeend", `<div class="list-item"><div class="row-title">${esc(name)}</div><button class="small" onclick="loadSlot('${escAttr(name)}')">불러오기</button><button class="small danger" onclick="deleteSlot('${escAttr(name)}')">삭제</button></div>`)); }
+  window.loadSlot=name=>{ if(!confirm(`${name} 슬롯을 불러올까요? 현재 데이터는 덮어씌워집니다.`))return; const slots=data.saveSlots; data=structuredClone(slots[name]); data.saveSlots=slots; normalize(data); save(); renderAll(); };
+  window.deleteSlot=name=>{ delete data.saveSlots[name]; save(); renderSaveSlotList(); };
+
+  function renderWorldState(){ const box=$("worldStateView"); if(!box)return; box.innerHTML=`턴 ${data.worldState.turn}<br>날씨: ${esc(data.worldState.weather)}<br>시간: ${esc(data.worldState.time)}<br>월드 이벤트 ${data.worldEvents.length}개`; }
+  function advanceWorldEvents(){ data.worldState.turn++; processWorldEvents(); save(); renderAll(); }
+  function processWorldEvents(){
+    data.worldEvents.forEach(e=>{
+      if(data.worldState.turn % e.every !== 0) return;
+      if(e.type==="condition"){ const c=data.conditions.find(x=>x.id===e.conditionId); if(c) data.players.forEach(p=>applyCondition(p,c,c.duration)); addLog(`월드 이벤트 ${e.name}: 상태이상 적용`); }
+      if(e.type==="damage"){ data.players.forEach(p=>p.hp=Math.max(0,p.hp-e.value)); addLog(`월드 이벤트 ${e.name}: 전체 피해 ${e.value}`); }
+      if(e.type==="heal"){ data.players.forEach(p=>p.hp=Math.min(p.maxHp,p.hp+e.value)); addLog(`월드 이벤트 ${e.name}: 전체 회복 ${e.value}`); }
+      if(e.type==="weather"){ data.worldState.weather=e.text||"변화"; addLog(`날씨 변경: ${data.worldState.weather}`); }
+      if(e.type==="time"){ data.worldState.time=e.text||"변화"; addLog(`시간 변경: ${data.worldState.time}`); }
+      if(e.type==="faction"){ const f=data.factions.find(x=>x.name===e.text); if(f){ f.rep+=e.value; addLog(`세력 ${f.name} 평판 ${e.value>0?"+":""}${e.value}`); } }
+    });
+  }
+  function rollEncounter(){ const total=data.encounters.reduce((s,e)=>s+Math.max(1,e.weight||1),0); let r=Math.random()*total; let picked=data.encounters[0]; for(const e of data.encounters){ r-=Math.max(1,e.weight||1); if(r<=0){ picked=e; break; } } $("encounterResult").textContent=picked?`${picked.name}\\n${picked.desc}`:"랜덤 이벤트 없음"; if(picked)addLog(`랜덤 이벤트: ${picked.name}`); }
+
+  function fillRuntimeShopSelects(){ const npc=$("runtimeShopNpcSelect"), target=$("runtimeShopTarget"), up=$("runtimeUpgradeTarget"); if(npc){ const prev=npc.value; npc.innerHTML=""; const shopNpcIds=new Set([...data.shops.map(s=>s.npcId), ...data.creation.merchantShops.map(s=>s.npcId)]); data.npcs.filter(n=>shopNpcIds.has(n.id) || n.job==="merchant").forEach(n=>npc.add(new Option(n.name,n.id))); if(prev)npc.value=prev; } if(target){ const prev=target.value || data.playerSession.currentPlayerId || ""; target.innerHTML=""; data.players.forEach(p=>target.add(new Option(`${p.name} / ${p.gold} Gold`,p.id))); if(prev)target.value=prev; } if(up){ up.innerHTML=""; data.equipments.forEach(e=>up.add(new Option(`${e.name} +${e.upgradeLevel||0}`,e.id))); } }
+  function openShop(){ const npcId=$("runtimeShopNpcSelect").value; const selectedTarget=$("runtimeShopTarget")?.value || data.playerSession.currentPlayerId; const player=data.players.find(p=>p.id===selectedTarget); if(!npcId||!player)return alert("상점 NPC와 플레이어를 선택하세요."); data.playerSession.currentPlayerId=player.id; const merchantGoods=data.creation.merchantShops.filter(s=>s.npcId===npcId); if(merchantGoods.length){ save(); openMainSceneShop(npcId); return; } const npc=data.npcs.find(n=>n.id===npcId); $("shopTitle").textContent=`${npc?.name||"상점"}`; const box=$("shopContent"); box.innerHTML=""; const goodsList=data.shops.filter(s=>s.npcId===npcId); if(!goodsList.length)box.innerHTML=`<p class="muted">상점 상품이 없습니다.</p>`; goodsList.forEach(g=>{ const goods=getGoods(g.type,g.goodsId); box.insertAdjacentHTML("beforeend", `<div class="shop-good"><strong>${esc(goods?.name||"?")}</strong><p>${shopTypeName(g.type)} / ${g.price} Gold / 재고 ${g.stock??"무제한"}</p><button onclick="buyGoods('${g.id}','${player.id}')">구매</button></div>`); }); $("shopModal").classList.remove("hidden"); }
+  window.buyGoods=(shopId,playerId)=>{ const g=data.shops.find(x=>x.id===shopId), p=data.players.find(x=>x.id===playerId); if(!g||!p)return; const goods=getGoods(g.type,g.goodsId); if(!goods)return alert("상품 없음"); if(!confirm(`${g.price}골드로 ${goods.name}을(를) 구매하시겠습니까?`))return; if(p.gold<g.price)return alert("구매 실패: 골드가 부족합니다."); if(g.stock!==null&&g.stock<=0)return alert("구매 실패: 재고가 없습니다."); p.gold-=g.price; if(g.stock!==null)g.stock--; if(g.type==="item"){ data.items.push({...structuredClone(goods), id:makeId(), owner:p.name, used:false}); } if(g.type==="equipment"){ data.equipments.push({...structuredClone(goods), id:makeId(), owner:p.name, equippedBy:""}); } if(g.type==="skill"){ data.skills.push({...structuredClone(goods), id:makeId(), ownerType:"player", ownerId:p.id, forSale:false}); } addLog(`${p.name} 구매: ${goods.name}`); save(); showToast("구매 성공"); renderAll(); openShop(); };
+  function openUpgrade(){ const eq=data.equipments.find(e=>e.id===$("runtimeUpgradeTarget").value); const box=$("upgradeContent"); if(!eq)return alert("장비 선택"); box.innerHTML=`<h3>${esc(eq.name)} +${eq.upgradeLevel||0}</h3><p>내구도 ${eq.durability}/${eq.maxDurability}</p>`; data.upgradeRules.sort((a,b)=>a.level-b.level).forEach(r=>box.insertAdjacentHTML("beforeend", `<div class="upgrade-target"><strong>+${r.level}</strong><p>성공 ${r.success}% / 비용 ${r.cost} / 스탯 +${r.statBonus}</p><button onclick="tryUpgrade('${eq.id}','${r.id}')">도전</button></div>`)); $("upgradeModal").classList.remove("hidden"); }
+  window.tryUpgrade=(eqId,ruleId)=>{ const eq=data.equipments.find(e=>e.id===eqId), r=data.upgradeRules.find(x=>x.id===ruleId); if(!eq||!r)return; const success=Math.random()*100<r.success; if(success){ eq.upgradeLevel=r.level; COMMON_STATS.forEach(stat=>eq.stats[stat]=Number(eq.stats[stat]||0)+r.statBonus); addLog(`${eq.name} 강화 성공 +${r.level}`); } else { eq.durability=Math.max(0,eq.durability-r.durabilityPenalty); if(r.breakable&&eq.durability<=0){ data.equipments=data.equipments.filter(e=>e.id!==eq.id); addLog(`${eq.name} 강화 실패로 파괴`); } else addLog(`${eq.name} 강화 실패`); } save(); renderAll(); openUpgrade(); };
+  function screenEffect(kind){ const el=$("screenEffect"); el.className=`screen-effect ${kind}`; setTimeout(()=>el.className="screen-effect hidden",1200); }
+  function getGoods(type,id){ return (type==="item"?data.items:type==="equipment"?data.equipments:data.skills).find(x=>x.id===id); }
+
+  function requestMasterAccess(){
+    data.access ??= { role: "none", masterPassword: "" };
+    if (!data.access.masterPassword) {
+      data.access.role = "master";
+      data.mode = "master";
+      save();
+      renderAll();
+      showToast("마스터로 접속했습니다.");
+      return;
+    }
+    $("masterLoginPassword").value = "";
+    $("masterLoginError").textContent = "";
+    $("masterLoginModal")?.classList.remove("hidden");
+    setTimeout(() => $("masterLoginPassword")?.focus(), 50);
+  }
+
+  function confirmMasterLogin(){
+    const input = $("masterLoginPassword")?.value || "";
+    if (input === data.access.masterPassword) {
+      $("masterLoginModal")?.classList.add("hidden");
+      data.access.role = "master";
+      data.mode = "master";
+      save();
+      renderAll();
+      showToast("마스터로 접속했습니다.");
+    } else {
+      $("masterLoginError").textContent = "비밀번호가 틀렸습니다.";
+    }
+  }
+
+  function enterPlayerMode(){
+    data.access ??= { role: "none", masterPassword: "" };
+    data.access.role = "player";
+    data.mode = "player";
+    save();
+    renderAll();
+    showToast("플레이어로 접속했습니다.");
+  }
+
+  function saveMasterPassword(){
+    if (data.access.role !== "master") {
+      showToast("마스터 권한이 필요합니다.");
+      return;
+    }
+    data.access.masterPassword = $("masterPasswordInput")?.value || "";
+    $("masterPasswordInput").value = "";
+    save();
+    renderAccessStatus();
+    showToast(data.access.masterPassword ? "마스터 비밀번호가 설정되었습니다." : "비밀번호 없음 상태입니다.");
+  }
+
+  function clearMasterPassword(){
+    if (data.access.role !== "master") {
+      showToast("마스터 권한이 필요합니다.");
+      return;
+    }
+    if (!confirm("마스터 비밀번호를 해제할까요?")) return;
+    data.access.masterPassword = "";
+    save();
+    renderAccessStatus();
+    showToast("마스터 비밀번호가 해제되었습니다.");
+  }
+
+  function renderAccessStatus(){
+    const box = $("masterPasswordStatus");
+    if (!box) return;
+    box.textContent = data.access?.masterPassword
+      ? "현재 상태: 마스터 비밀번호 설정됨"
+      : "현재 상태: 비밀번호 없음";
+  }
+
+  function renderStandalonePlayerView(){
+    renderPlayerPortal();
+    renderStandaloneScene();
+    renderStandaloneBosses();
+    renderStandaloneTurns();
+    renderStandaloneCards();
+  }
+
+  function renderStandaloneScene(){
+    const img = $("standalonePlayerSceneImage");
+    const ph = $("standalonePlayerScenePlaceholder");
+    const src = data.sceneHistory?.[0] || "";
+    if (img && ph) {
+      if (src) {
+        img.src = src;
+        img.style.display = "block";
+        ph.style.display = "none";
+      } else {
+        img.style.display = "none";
+        ph.style.display = "block";
+      }
+    }
+    const map = data.maps?.find(m => m.id === data.activeMapId);
+    if ($("standalonePlayerCurrentMap")) {
+      $("standalonePlayerCurrentMap").textContent = map ? `${map.name}\n${map.desc || ""}` : "현재 맵 정보 없음";
+    }
+  }
+
+  function renderStandaloneBosses(){
+    const box = $("standalonePlayerBossArea");
+    const panel = $("playerBossSlidePanel");
+    if (!box) return;
+    const bosses = (data.activeBossIds || []).map(id => data.bosses.find(b => b.id === id)).filter(Boolean);
+    panel?.classList.toggle("has-boss", bosses.length > 0);
+    if (!bosses.length) {
+      box.innerHTML = `<p class="muted">표시 중인 보스 없음</p>`;
+      return;
+    }
+    box.innerHTML = bosses.map(b => {
+      const hp = getPercent(b.hp,b.maxHp);
+      return `<div class="player-boss-card">
+        <h3>${esc(b.name)}</h3>
+        <p class="muted">${esc(b.memo || "")}</p>
+        <div class="small-bar-frame"><div class="hp-bar hp" style="width:${hp}%"></div></div>
+        <div class="stat-line"><span>${b.hp}/${b.maxHp}</span><span>${hp}%</span></div>
+      </div>`;
+    }).join("");
+  }
+
+  function renderStandaloneTurns(){
+    const list = $("standalonePlayerTurnList");
+    if (!list) return;
+    if (!data.turns?.length) {
+      list.innerHTML = `<li>턴 없음</li>`;
+      return;
+    }
+    list.innerHTML = data.turns.map((t,i)=>`<li class="${i===data.currentTurn?"active":""}">
+      <strong>${esc(t.name)}</strong> / 선공 ${t.init}
+    </li>`).join("");
+  }
+
+  function renderStandaloneCards(){
+    const box = $("standalonePlayerCards");
+    if (!box) return;
+    box.innerHTML = (data.players || []).map(p => {
+      const hp = getPercent(p.hp,p.maxHp);
+      const mp = getPercent(p.mp,p.maxMp);
+      const exp = getPercent(p.exp,p.nextExp);
+      return `<div class="player-view-card">
+        ${p.portrait ? `<img src="${p.portrait}" alt="${esc(p.name)}">` : `<div class="portrait-placeholder">NO<br>PORTRAIT</div>`}
+        <div>
+          <div class="player-name">${esc(p.name)}</div>
+          <div class="level-badge">Lv.${p.level || 1}</div>
+          <div class="stat-line"><span>HP</span><span>${p.hp}/${p.maxHp}</span></div>
+          <div class="small-bar-frame"><div class="hp-bar hp" style="width:${hp}%"></div></div>
+          <div class="stat-line"><span>MP</span><span>${p.mp}/${p.maxMp}</span></div>
+          <div class="small-bar-frame"><div class="hp-bar mp" style="width:${mp}%"></div></div>
+          <div class="stat-line"><span>EXP</span><span>${p.exp || 0}/${p.nextExp || 100}</span></div>
+          <div class="small-bar-frame"><div class="hp-bar exp" style="width:${exp}%"></div></div>
+          <div class="player-extra">상태: ${esc(p.status || "정상")}<br>Gold ${p.gold || 0}</div>
+        </div>
+      </div>`;
+    }).join("");
+  }
+
+  function standalonePlayerRoll(){
+    const dice = Math.floor(Math.random()*20)+1;
+    let text = `d20(${dice})`;
+    if (dice === 20) text += "\n크리티컬!";
+    if (dice === 1) text += "\n펌블!";
+    const resultBox = $("standalonePlayerDiceResult");
+    if (resultBox) resultBox.textContent = text;
+    addLog(`[플레이어 화면 주사위] ${text}`);
+    save();
+  }
+
+  function showToast(message){
+    const box = $("toastMessage");
+    if (!box) return console.log(message);
+    box.textContent = message;
+    box.classList.remove("hidden");
+    clearTimeout(window.__toastTimer);
+    window.__toastTimer = setTimeout(()=>box.classList.add("hidden"), 1600);
+  }
+
+
+  /* ===== v17.2 Master Tabs + Advanced Systems ===== */
+
+  function bindMasterCategoryTabs(){
+    document.querySelectorAll(".master-category-nav button[data-category]").forEach(btn => {
+      btn.addEventListener("click", () => {
+        setMasterCategory(btn.dataset.category);
+      });
+    });
+    assignMasterCategories();
+    setMasterCategory("world");
+  }
+
+  function assignMasterCategories(){
+    const grid = document.querySelector("#masterScreen .setup-grid");
+    if (!grid) return;
+
+    let current = "world";
+    Array.from(grid.children).forEach(el => {
+      if (el.classList.contains("category-divider")) {
+        if (el.id.includes("world")) current = "world";
+        if (el.id.includes("actors")) current = "actors";
+        if (el.id.includes("combat")) current = "combat";
+        if (el.id.includes("equipment")) current = "equipment";
+        if (el.id.includes("story")) current = "story";
+        el.dataset.category = current;
+        return;
+      }
+      if (el.classList.contains("card")) {
+        const title = el.querySelector("h2")?.textContent || "";
+        el.dataset.category = current;
+        if (/맵|월드|랜덤|세력/.test(title)) el.dataset.category = "world";
+        if (/플레이어|NPC|보스/.test(title)) el.dataset.category = "actors";
+        if (/상태이상|스킬 설정|펌블|전투/.test(title)) el.dataset.category = "combat";
+        if (/장비|소재|인챈트|아이템|상점|강화/.test(title)) el.dataset.category = "equipment";
+        if (/스킬 트리|저장 슬롯|고급 시스템|컷신|스토리|세션/.test(title)) el.dataset.category = "story";
+      }
+    });
+  }
+
+  function setMasterCategory(category){
+    const grid = document.querySelector("#masterScreen .setup-grid");
+    if (!grid) return;
+
+    document.querySelectorAll(".master-category-nav button[data-category]").forEach(btn => {
+      btn.classList.toggle("active", btn.dataset.category === category);
+    });
+
+    if (category === "all") {
+      grid.classList.remove("category-filter-active");
+      grid.querySelectorAll(".active-category").forEach(el => el.classList.remove("active-category"));
+      return;
+    }
+
+    grid.classList.add("category-filter-active");
+    Array.from(grid.children).forEach(el => {
+      el.classList.toggle("active-category", el.dataset.category === category);
+    });
+    window.scrollTo({top:0, behavior:"smooth"});
+  }
+
+  function bindAdvancedSystems(){
+    $("playCutsceneBtn")?.addEventListener("click", addAndPlayCutscene);
+    $("addSfxBtn")?.addEventListener("click", addSfx);
+    $("addFearRuleBtn")?.addEventListener("click", addFearRule);
+    $("addCurseBtn")?.addEventListener("click", addCurse);
+    $("addDeityBtn")?.addEventListener("click", addDeity);
+    $("addResourceBtn")?.addEventListener("click", addResource);
+    $("addBossPhaseBtn")?.addEventListener("click", addBossPhase);
+    $("addBossPartBtn")?.addEventListener("click", addBossPart);
+    $("addInspectBtn")?.addEventListener("click", addInspection);
+    $("addDungeonNodeBtn")?.addEventListener("click", addDungeonNode);
+    $("addEnvironmentBtn")?.addEventListener("click", addEnvironment);
+    $("addCampBtn")?.addEventListener("click", addCamp);
+    $("addTimerBtn")?.addEventListener("click", addTimer);
+    $("addWorldChangeBtn")?.addEventListener("click", addWorldChange);
+    $("addRecipeBtn")?.addEventListener("click", addRecipe);
+    $("addSetBtn")?.addEventListener("click", addSet);
+    $("addPersonalQuestBtn")?.addEventListener("click", addPersonalQuest);
+    $("addMemoryBtn")?.addEventListener("click", addMemory);
+    $("addEndingBtn")?.addEventListener("click", addEnding);
+    $("runtimePlayCutsceneBtn")?.addEventListener("click", () => {
+      const c = data.advanced.cutscenes.find(x => x.id === $("runtimeCutsceneSelect")?.value);
+      if (c) playCutscene(c);
+    });
+    $("runtimeRevealInspectBtn")?.addEventListener("click", revealInspection);
+    $("runtimeFearCheckBtn")?.addEventListener("click", runFearCheck);
+    $("runtimeCampBtn")?.addEventListener("click", runCamp);
+    $("exportSessionBtn")?.addEventListener("click", exportSessionTxt);
+    $("closeCutsceneBtn")?.addEventListener("click", () => $("cutsceneOverlay")?.classList.add("hidden"));
+    fillFearStatSelect();
+  }
+
+  function renderAdvancedSystems(){
+    fillAdvancedSelects();
+    renderAdvancedLists();
+    renderTimerView();
+  }
+
+  function fillAdvancedSelects(){
+    fillNpcPortraitSelect();
+    fillPhaseBossSelect();
+    fillRuntimeCutsceneSelect();
+    fillRuntimeInspectSelect();
+    fillRuntimeFearSelect();
+    fillRuntimeCampSelect();
+    fillFearTargetSelect();
+  }
+
+  function fillFearStatSelect(){
+    const s = $("fearStat");
+    if (!s || s.options.length) return;
+    COMMON_STATS.forEach(stat => s.add(new Option(STAT_LABELS[stat], stat)));
+  }
+
+  function fillNpcPortraitSelect(){
+    const s = $("cutscenePortraitNpc");
+    if (!s) return;
+    const prev = s.value;
+    s.innerHTML = `<option value="">초상화 없음</option>`;
+    data.npcs.forEach(n => s.add(new Option(n.name, n.id)));
+    if (prev) s.value = prev;
+  }
+
+  function fillPhaseBossSelect(){
+    const s = $("phaseBossSelect");
+    if (!s) return;
+    const prev = s.value;
+    s.innerHTML = "";
+    data.bosses.forEach(b => s.add(new Option(b.name, b.id)));
+    if (prev) s.value = prev;
+  }
+
+  function fillRuntimeCutsceneSelect(){
+    const s = $("runtimeCutsceneSelect");
+    if (!s) return;
+    const prev = s.value;
+    s.innerHTML = "";
+    data.advanced.cutscenes.forEach(c => s.add(new Option(c.speaker || "컷신", c.id)));
+    if (prev) s.value = prev;
+  }
+
+  function fillRuntimeInspectSelect(){
+    const s = $("runtimeInspectSelect");
+    if (!s) return;
+    const prev = s.value;
+    s.innerHTML = "";
+    data.advanced.inspections.forEach(i => s.add(new Option(i.name, i.id)));
+    if (prev) s.value = prev;
+  }
+
+  function fillRuntimeFearSelect(){
+    const s = $("runtimeFearSelect");
+    if (!s) return;
+    const prev = s.value;
+    s.innerHTML = "";
+    data.advanced.fearRules.forEach(f => s.add(new Option(f.name, f.id)));
+    if (prev) s.value = prev;
+  }
+
+  function fillRuntimeCampSelect(){
+    const s = $("runtimeCampSelect");
+    if (!s) return;
+    const prev = s.value;
+    s.innerHTML = "";
+    data.advanced.camps.forEach(c => s.add(new Option(c.name, c.id)));
+    if (prev) s.value = prev;
+  }
+
+  function fillFearTargetSelect(){
+    const s = $("runtimeFearTarget");
+    if (!s) return;
+    const prev = s.value;
+    s.innerHTML = "";
+    data.players.forEach(p => s.add(new Option(p.name, p.id)));
+    if (prev) s.value = prev;
+  }
+
+  function addAndPlayCutscene(){
+    const npc = data.npcs.find(n => n.id === $("cutscenePortraitNpc")?.value);
+    const c = {
+      id: makeId(),
+      speaker: $("cutsceneSpeaker")?.value || npc?.name || "???",
+      text: $("cutsceneText")?.value || "",
+      portrait: npc?.portrait || ""
+    };
+    data.advanced.cutscenes.push(c);
+    addLog(`컷신 저장: ${c.speaker}`);
+    save(); renderAdvancedSystems(); playCutscene(c); showToast("컷신 저장 완료");
+  }
+
+  function playCutscene(c){
+    $("cutsceneSpeakerView").textContent = c.speaker || "???";
+    $("cutsceneTextView").textContent = c.text || "";
+    if (c.portrait) {
+      $("cutscenePortrait").src = c.portrait;
+      $("cutscenePortrait").classList.remove("hidden");
+    } else {
+      $("cutscenePortrait").classList.add("hidden");
+    }
+    $("cutsceneOverlay").classList.remove("hidden");
+    data.advanced.sessionNotes.push(`[컷신] ${c.speaker}: ${c.text}`);
+    save();
+  }
+
+  function addSfx(){ data.advanced.sfx.push({id:makeId(), name:$("sfxName")?.value||"효과음", url:$("sfxUrl")?.value||""}); save(); renderAdvancedSystems(); }
+  function addFearRule(){ data.advanced.fearRules.push({id:makeId(), name:$("fearName")?.value||"공포 판정", stat:$("fearStat")?.value||"MND", difficulty:Number($("fearDifficulty")?.value||10), madnessGain:Number($("fearMadnessGain")?.value||1)}); save(); renderAdvancedSystems(); }
+  function addCurse(){ data.advanced.curses.push({id:makeId(), name:$("curseName")?.value||"저주", madnessPerTurn:Number($("curseMadnessPerTurn")?.value||0), hpPerTurn:Number($("curseHpPerTurn")?.value||0)}); save(); renderAdvancedSystems(); }
+  function addDeity(){ data.advanced.deities.push({id:makeId(), name:$("deityName")?.value||"이름 없는 신", faithReq:Number($("deityFaithReq")?.value||0), blessing:$("deityBlessing")?.value||""}); save(); renderAdvancedSystems(); }
+  function addResource(){ data.advanced.resources.push({id:makeId(), name:$("resourceName")?.value||"자원", value:Number($("resourceDefault")?.value||0)}); save(); renderAdvancedSystems(); }
+  function addBossPhase(){ data.advanced.bossPhases.push({id:makeId(), bossId:$("phaseBossSelect")?.value||"", hpPercent:Number($("phaseHpPercent")?.value||50), name:$("phaseName")?.value||"페이즈", bgm:$("phaseBgm")?.value||"", effect:$("phaseEffect")?.value||""}); save(); renderAdvancedSystems(); }
+  function addBossPart(){ data.advanced.bossParts.push({id:makeId(), bossId:$("phaseBossSelect")?.value||"", name:$("bossPartName")?.value||"부위", hp:Number($("bossPartHp")?.value||10), effect:$("bossPartEffect")?.value||""}); save(); renderAdvancedSystems(); }
+  function addInspection(){ data.advanced.inspections.push({id:makeId(), name:$("inspectName")?.value||"조사 포인트", public:$("inspectPublic")?.value||"", secret:$("inspectSecret")?.value||""}); save(); renderAdvancedSystems(); }
+  function addDungeonNode(){ data.advanced.dungeonNodes.push({id:makeId(), name:$("dungeonNodeName")?.value||"노드", choices:($("dungeonChoices")?.value||"").split("\\n").filter(Boolean)}); save(); renderAdvancedSystems(); }
+  function addEnvironment(){ data.advanced.environments.push({id:makeId(), name:$("environmentName")?.value||"환경 오브젝트", effect:$("environmentEffect")?.value||""}); save(); renderAdvancedSystems(); }
+  function addCamp(){ data.advanced.camps.push({id:makeId(), name:$("campName")?.value||"휴식", hp:Number($("campHp")?.value||0), mp:Number($("campMp")?.value||0)}); save(); renderAdvancedSystems(); }
+  function addTimer(){ data.advanced.timers.push({id:makeId(), name:$("timerName")?.value||"타이머", turns:Number($("timerTurns")?.value||1), remaining:Number($("timerTurns")?.value||1)}); save(); renderAdvancedSystems(); }
+  function addWorldChange(){ data.advanced.worldChanges.push({id:makeId(), name:$("worldChangeName")?.value||"월드 변화", desc:$("worldChangeDesc")?.value||""}); save(); renderAdvancedSystems(); }
+  function addRecipe(){ data.advanced.recipes.push({id:makeId(), name:$("recipeName")?.value||"제작법", materials:($("recipeMaterials")?.value||"").split("\\n").filter(Boolean), result:$("recipeResult")?.value||""}); save(); renderAdvancedSystems(); }
+  function addSet(){ data.advanced.sets.push({id:makeId(), name:$("setName")?.value||"세트", pieces:Number($("setPieces")?.value||2), effect:$("setEffect")?.value||""}); save(); renderAdvancedSystems(); }
+  function addPersonalQuest(){ data.advanced.personalQuests.push({id:makeId(), owner:$("personalQuestOwner")?.value||"", title:$("personalQuestTitle")?.value||"개인 퀘스트", desc:$("personalQuestDesc")?.value||""}); save(); renderAdvancedSystems(); }
+  function addMemory(){ data.advanced.memories.push({id:makeId(), title:$("memoryTitle")?.value||"기억 파편", text:$("memoryText")?.value||""}); save(); renderAdvancedSystems(); }
+  function addEnding(){ data.advanced.endings.push({id:makeId(), name:$("endingName")?.value||"엔딩", condition:$("endingCondition")?.value||""}); save(); renderAdvancedSystems(); }
+
+  function revealInspection(){
+    const i = data.advanced.inspections.find(x => x.id === $("runtimeInspectSelect")?.value);
+    if (!i) return;
+    const msg = `[조사] ${i.name}\n공개: ${i.public}\n마스터 비밀: ${i.secret}`;
+    addLog(msg);
+    $("statCheckResult").textContent = msg;
+  }
+
+  function runFearCheck(){
+    const rule = data.advanced.fearRules.find(x => x.id === $("runtimeFearSelect")?.value);
+    const p = data.players.find(x => x.id === $("runtimeFearTarget")?.value);
+    if (!rule || !p) return alert("공포 규칙/대상 선택");
+    const roll = Math.floor(Math.random()*20)+1;
+    const stat = Number(p.stats?.[rule.stat]||0);
+    const total = roll + stat;
+    let msg = `[공포 판정] ${p.name}: d20(${roll}) + ${STAT_LABELS[rule.stat]}(${stat}) = ${total}`;
+    if (total < rule.difficulty) {
+      p.madness = Number(p.madness||0) + rule.madnessGain;
+      msg += ` / 실패: 광기 +${rule.madnessGain}`;
+      screenEffect("danger");
+    } else {
+      msg += " / 성공";
+    }
+    addLog(msg); save(); renderAll();
+  }
+
+  function runCamp(){
+    const camp = data.advanced.camps.find(x => x.id === $("runtimeCampSelect")?.value);
+    if (!camp) return;
+    data.players.forEach(p => {
+      p.hp = Math.min(p.maxHp, p.hp + camp.hp);
+      p.mp = Math.min(p.maxMp, p.mp + camp.mp);
+    });
+    addLog(`[휴식] ${camp.name}: HP +${camp.hp}, MP +${camp.mp}`);
+    save(); renderAll();
+  }
+
+  function exportSessionTxt(){
+    const lines = [
+      "TRPG SESSION LOG",
+      "================",
+      "",
+      "[전투/시스템 로그]",
+      ...(data.diceLog || []),
+      "",
+      "[컷신/세션 노트]",
+      ...(data.advanced.sessionNotes || []),
+      "",
+      "[월드 변화]",
+      ...(data.advanced.worldChanges || []).map(w=>`${w.name}: ${w.desc}`),
+      "",
+      "[엔딩 후보]",
+      ...(data.advanced.endings || []).map(e=>`${e.name}: ${e.condition}`)
+    ];
+    const blob = new Blob([lines.join("\\n")], {type:"text/plain"});
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = "trpg-session-log.txt";
+    a.click();
+    URL.revokeObjectURL(url);
+  }
+
+  function renderAdvancedLists(){
+    const set = (id, html) => { const box=$(id); if(box) box.innerHTML = html; };
+    set("cutsceneList", data.advanced.cutscenes.map(c=>`<div class="list-item"><div class="row-title">${esc(c.speaker)}</div><div class="row-meta">${esc(c.text).slice(0,120)}</div></div>`).join(""));
+    set("sfxList", data.advanced.sfx.map(s=>`<div class="list-item"><div class="row-title">${esc(s.name)}</div><button class="small" onclick="new Audio('${escAttr(s.url)}').play()">재생</button></div>`).join(""));
+    set("horrorList", [...data.advanced.fearRules.map(f=>`<div class="list-item"><div class="row-title">공포: ${esc(f.name)}</div><div class="row-meta">${STAT_LABELS[f.stat]} / 난이도 ${f.difficulty} / 광기 +${f.madnessGain}</div></div>`), ...data.advanced.curses.map(c=>`<div class="list-item"><div class="row-title">저주: ${esc(c.name)}</div><div class="row-meta">광기 +${c.madnessPerTurn}/턴, HP -${c.hpPerTurn}/턴</div></div>`)].join(""));
+    set("faithResourceList", [...data.advanced.deities.map(d=>`<div class="list-item"><div class="row-title">${esc(d.name)}</div><div class="row-meta">요구 신앙 ${d.faithReq}<br>${esc(d.blessing)}</div></div>`), ...data.advanced.resources.map(r=>`<div class="list-item"><div class="row-title">${esc(r.name)}</div><div class="row-meta">기본값 ${r.value}</div></div>`)].join(""));
+    set("bossAdvancedList", [...data.advanced.bossPhases.map(p=>`<div class="list-item"><div class="row-title">페이즈 ${esc(p.name)}</div><div class="row-meta">HP ${p.hpPercent}% 이하<br>${esc(p.effect)}</div></div>`), ...data.advanced.bossParts.map(p=>`<div class="list-item"><div class="row-title">부위 ${esc(p.name)}</div><div class="row-meta">HP ${p.hp}<br>${esc(p.effect)}</div></div>`)].join(""));
+    set("explorationList", [...data.advanced.inspections.map(i=>`<div class="list-item"><div class="row-title">조사 ${esc(i.name)}</div><div class="row-meta">${esc(i.public)}</div></div>`), ...data.advanced.dungeonNodes.map(n=>`<div class="list-item"><div class="row-title">던전 ${esc(n.name)}</div><div class="row-meta">${n.choices.map(esc).join(" / ")}</div></div>`), ...data.advanced.environments.map(e=>`<div class="list-item"><div class="row-title">환경 ${esc(e.name)}</div><div class="row-meta">${esc(e.effect)}</div></div>`)].join(""));
+    set("worldAdvancedList", [...data.advanced.camps.map(c=>`<div class="list-item"><div class="row-title">휴식 ${esc(c.name)}</div><div class="row-meta">HP +${c.hp}, MP +${c.mp}</div></div>`), ...data.advanced.timers.map(t=>`<div class="list-item"><div class="row-title">타이머 ${esc(t.name)}</div><div class="row-meta">${t.remaining}/${t.turns}턴</div></div>`), ...data.advanced.worldChanges.map(w=>`<div class="list-item"><div class="row-title">${esc(w.name)}</div><div class="row-meta">${esc(w.desc)}</div></div>`)].join(""));
+    set("craftList", [...data.advanced.recipes.map(r=>`<div class="list-item"><div class="row-title">${esc(r.name)}</div><div class="row-meta">${r.materials.map(esc).join(", ")} → ${esc(r.result)}</div></div>`), ...data.advanced.sets.map(s=>`<div class="list-item"><div class="row-title">세트 ${esc(s.name)}</div><div class="row-meta">${s.pieces}개 필요<br>${esc(s.effect)}</div></div>`)].join(""));
+    set("storyAdvancedList", [...data.advanced.personalQuests.map(q=>`<div class="list-item"><div class="row-title">${esc(q.owner)}: ${esc(q.title)}</div><div class="row-meta">${esc(q.desc)}</div></div>`), ...data.advanced.memories.map(m=>`<div class="list-item"><div class="row-title">기억 ${esc(m.title)}</div><div class="row-meta">${esc(m.text)}</div></div>`), ...data.advanced.endings.map(e=>`<div class="list-item"><div class="row-title">엔딩 ${esc(e.name)}</div><div class="row-meta">${esc(e.condition)}</div></div>`)].join(""));
+  }
+
+  function renderTimerView(){
+    const box=$("timerView");
+    if(!box) return;
+    box.innerHTML = data.advanced.timers.length
+      ? data.advanced.timers.map(t=>`${esc(t.name)}: ${t.remaining}/${t.turns}턴`).join("<br>")
+      : "진행 중인 타이머 없음";
+  }
+
+  function renderAdvancedListsAndTimers(){
+    renderAdvancedLists();
+    renderTimerView();
+  }
+
+
+  /* ===== v17.3 Player Character Creation ===== */
+
+  let tempNewPlayerPortrait = "";
+  let tempMerchantShopImage = "";
+  let tempClassSkillIds = [];
+
+  function bindCreationSystem(){
+    $("newPlayerPortrait")?.addEventListener("change", e => readImage(e, v => tempNewPlayerPortrait = v));
+    $("rollCreationStatBtn")?.addEventListener("click", rollCreationStats);
+    $("rollClassDiceBtn")?.addEventListener("click", rollClassDice);
+    $("createPlayerCharacterBtn")?.addEventListener("click", createPlayerFromPortal);
+    $("creationClassSelect")?.addEventListener("change", renderCreationClassDesc);
+    $("saveCreationRuleBtn")?.addEventListener("click", saveCreationRule);
+    $("resetCreationSessionBtn")?.addEventListener("click", resetCreationSession);
+    $("clearClassListBtn")?.addEventListener("click", clearClassList);
+    $("addClassSkillBtn")?.addEventListener("click", addTempClassSkill);
+    $("addClassBtn")?.addEventListener("click", addCreationClass);
+    const leaveBtn = $("leaveCharacterBtn");
+    if (leaveBtn) {
+      leaveBtn.onclick = (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        leavePlayerCharacter();
+      };
+    }
+    $("merchantShopNpcSelect")?.addEventListener("change", renderMerchantShopLookForm);
+    $("merchantShopType")?.addEventListener("change", fillMerchantGoodsSelect);
+    $("merchantShopImage")?.addEventListener("change", e => readImage(e, v => tempMerchantShopImage = v));
+    $("saveMerchantShopLookBtn")?.addEventListener("click", saveMerchantShopLook);
+    $("addMerchantShopGoodsBtn")?.addEventListener("click", addMerchantShopGoods);
+    $("clearMerchantShopBtn")?.addEventListener("click", clearMerchantShopGoods);
+    $("closePlayerShopBtn")?.addEventListener("click", ()=>$("playerShopModal")?.classList.add("hidden"));
+    $("closeMainSceneShopBtn")?.addEventListener("click", closeMainSceneShop);
+    $("playerShopModal")?.addEventListener("click", e=>{ if(e.target.id==="playerShopModal") $("playerShopModal")?.classList.add("hidden"); });
+  }
+
+  function renderCreationSystem(){
+    renderCreationRuleForm();
+    renderCreationStatsGrid();
+    renderCreationClassSelect();
+    renderClassList();
+    renderMerchantShopSetup();
+    renderPlayerPortal();
+    renderInlineShopForCurrentCharacter();
+    renderInlineForgeForCurrentCharacter();
+  }
+
+  function renderCreationRuleForm(){
+    if ($("creationDiceSides")) {
+      $("creationDiceSides").value = data.creation.diceSides || 20;
+      $("creationRollLimit").value = data.creation.rollLimit || 3;
+      $("classRollLimit").value = data.creation.classRollLimit || 3;
+      $("unusedStatGold").value = data.creation.unusedGold || 0;
+      $("unusedStatExp").value = data.creation.unusedExp || 0;
+      const eqSel = $("unusedStatEquipment");
+      if (eqSel) {
+        const prev = eqSel.value || data.creation.unusedEquipmentId || "";
+        eqSel.innerHTML = `<option value="">장비 보상 없음</option>`;
+        data.equipments.forEach(e => eqSel.add(new Option(e.name, e.id)));
+        eqSel.value = prev;
+      }
+    }
+    const skillSel = $("classSkillSelect");
+    if (skillSel) {
+      const prev = skillSel.value;
+      skillSel.innerHTML = `<option value="">초기 스킬 선택</option>`;
+      data.skills.forEach(s => skillSel.add(new Option(s.name, s.id)));
+      if (prev) skillSel.value = prev;
+    }
+    const shopSel = $("classShopNpcSelect");
+    if (shopSel) {
+      const prev = shopSel.value;
+      shopSel.innerHTML = `<option value="">연결 상점 없음</option>`;
+      data.npcs
+        .filter(n => n.job === "merchant" || n.job === "상인")
+        .forEach(n => shopSel.add(new Option(`${n.name}의 상점`, n.id)));
+      if (prev) shopSel.value = prev;
+    }
+  }
+
+  function saveCreationRule(){
+    data.creation.diceSides = Math.max(1, Number($("creationDiceSides")?.value || 20));
+    data.creation.rollLimit = Math.max(1, Number($("creationRollLimit")?.value || 3));
+    data.creation.classRollLimit = Math.max(1, Number($("classRollLimit")?.value || 3));
+    data.creation.unusedGold = Number($("unusedStatGold")?.value || 0);
+    data.creation.unusedExp = Number($("unusedStatExp")?.value || 0);
+    data.creation.unusedEquipmentId = $("unusedStatEquipment")?.value || "";
+    save();
+    showToast("캐릭터 생성 규칙 저장 완료");
+  }
+
+  function addTempClassSkill(){
+    const id = $("classSkillSelect")?.value;
+    if (!id) return;
+    if (!tempClassSkillIds.includes(id)) tempClassSkillIds.push(id);
+    renderTempClassSkills();
+  }
+
+  function renderTempClassSkills(){
+    const box = $("classSkillPreview");
+    if (!box) return;
+    box.innerHTML = tempClassSkillIds.map((id,i)=>{
+      const s = data.skills.find(x=>x.id===id);
+      return `<div class="mini-item">${esc(s?.name || "스킬")} <button class="small danger" onclick="removeTempClassSkill(${i})">삭제</button></div>`;
+    }).join("");
+  }
+
+  window.removeTempClassSkill = function(i){
+    tempClassSkillIds.splice(i,1);
+    renderTempClassSkills();
+  };
+
+  function addCreationClass(){
+    const name = $("classNameInput")?.value.trim();
+    if (!name) return alert("직업 이름을 입력하세요.");
+    data.creation.classes.push({
+      id: makeId(),
+      name,
+      minRoll: Number($("classMinRollInput")?.value || 1),
+      maxRoll: Number($("classMaxRollInput")?.value || 20),
+      desc: $("classDescInput")?.value || "",
+      statMods: readStats("class"),
+      isMerchant: !!$("classIsMerchantInput")?.checked,
+      shopNpcId: $("classShopNpcSelect")?.value || "",
+      skillIds: structuredClone(tempClassSkillIds)
+    });
+    tempClassSkillIds = [];
+    clearInputs(["classNameInput","classMinRollInput","classMaxRollInput","classDescInput"]);
+    clearStats("class");
+    if ($("classIsMerchantInput")) $("classIsMerchantInput").checked = false;
+    if ($("classShopNpcSelect")) $("classShopNpcSelect").value = "";
+    renderTempClassSkills();
+    save();
+    renderCreationSystem();
+    showToast("직업 저장 완료");
+  }
+
+  function renderClassList(){
+    const box = $("classList");
+    if (!box) return;
+    box.innerHTML = data.creation.classes
+      .sort((a,b)=>a.minRoll-b.minRoll)
+      .map(c=>{
+        const mods = classStatText(c.statMods);
+        const shop = c.shopNpcId ? data.npcs.find(n=>n.id===c.shopNpcId)?.name || "연결 상점" : "없음";
+        return `<div class="list-item">
+        <div class="row-title">${esc(c.name)} / ${classRollText(c)}</div>
+        <div class="row-meta">${esc(c.desc || "")}<br>스탯 보정: ${mods}<br>초기 스킬 ${c.skillIds?.length || 0}개 / 상인 ${c.isMerchant ? "예" : "아니오"} / 연결 상점 ${esc(shop)}</div>
+        <button class="small danger" data-delete-class="${c.id}">삭제</button>
+      </div>`;
+      }).join("");
+  }
+
+  function classRollText(c){
+    const min = Math.max(1, Number(c.minRoll || 1));
+    const max = Math.max(min, Number(c.maxRoll || 20));
+    return min === max ? `${min}` : `${min}~${max}`;
+  }
+
+  function classStatText(stats){
+    const text = COMMON_STATS
+      .filter(stat => Number(stats?.[stat] || 0) !== 0)
+      .map(stat => `${STAT_LABELS[stat]} ${Number(stats[stat]) > 0 ? "+" : ""}${stats[stat]}`)
+      .join(" / ");
+    return text || "없음";
+  }
+
+  function isClassAllowedByRoll(c, roll){
+    if (!roll) return false;
+    const min = Math.max(1, Number(c.minRoll || 1));
+    const max = Math.max(min, Number(c.maxRoll || 20));
+    return roll >= min && roll <= max;
+  }
+
+  window.deleteCreationClass = function(id){
+    if (!confirm("직업을 삭제할까요?")) return;
+    data.creation.classes = data.creation.classes.filter(c=>c.id!==id);
+    save();
+    renderCreationSystem();
+  };
+
+
+  function resetCreationSession(){
+    if (!confirm("현재 플레이어 생성 진행상태를 초기화할까요?")) return;
+    data.playerSession.creationRoll = 0;
+    data.playerSession.creationRollsUsed = 0;
+    data.playerSession.classRoll = 0;
+    data.playerSession.classRollsUsed = 0;
+    data.playerSession.creationRemaining = 0;
+    data.playerSession.creationStats = {};
+    data.playerSession.currentPlayerId = "";
+    save();
+    renderAll();
+    showToast("플레이어 생성 진행 초기화 완료");
+  }
+
+  function clearClassList(){
+    if (!confirm("직업 목록을 전부 삭제할까요?")) return;
+    data.creation.classes = [];
+    tempClassSkillIds = [];
+    save();
+    renderCreationSystem();
+    showToast("직업 목록 전체 삭제 완료");
+  }
+
+  function clearMerchantShopGoods(){
+    if (!confirm("상인 판매 목록을 전부 삭제할까요?")) return;
+    data.creation.merchantShops = [];
+    data.creation.shopLooks = {};
+    save();
+    renderMerchantShopSetup();
+    renderAll();
+    showToast("상인 판매 목록 초기화 완료");
+  }
+
+  function rollCreationStats(){
+    const limit = Math.max(1, Number(data.creation.rollLimit || 3));
+    data.playerSession.creationRollsUsed = Number(data.playerSession.creationRollsUsed || 0);
+    if (data.playerSession.creationRollsUsed >= limit) {
+      alert(`초기 스탯 주사위는 최대 ${limit}번까지 굴릴 수 있습니다.`);
+      return;
+    }
+    const sides = Math.max(1, Number(data.creation.diceSides || 20));
+    const roll = Math.floor(Math.random()*sides)+1;
+    data.playerSession.creationRollsUsed++;
+    data.playerSession.creationRoll = roll;
+    data.playerSession.creationRemaining = roll;
+    data.playerSession.creationStats = {};
+    COMMON_STATS.forEach(s=>data.playerSession.creationStats[s]=0);
+    save();
+    renderCreationStatsGrid();
+    renderCreationClassSelect();
+    showToast(`초기 스탯 ${roll}점 획득 (${data.playerSession.creationRollsUsed}/${limit})`);
+  }
+
+  function renderCreationStatsGrid(){
+    const box = $("creationStatsGrid");
+    if (!box) return;
+    data.playerSession.creationStats ??= {};
+    COMMON_STATS.forEach(s=>data.playerSession.creationStats[s] ??= 0);
+    box.innerHTML = COMMON_STATS.map(stat=>`
+      <div class="creation-stat-row">
+        <strong>${STAT_LABELS[stat]}</strong>
+        <div class="stat-controls">
+          <button class="creation-stat-btn" data-creation-stat="${stat}" data-delta="-1">-</button>
+          <input class="creation-stat-input" type="number" min="0" data-creation-stat-input="${stat}" value="${data.playerSession.creationStats[stat] || 0}" />
+          <button class="creation-stat-btn" data-creation-stat="${stat}" data-delta="1">+</button>
+        </div>
+      </div>
+    `).join("");
+    if ($("remainingStatPoints")) $("remainingStatPoints").textContent = `남은 포인트: ${data.playerSession.creationRemaining || 0}`;
+    if ($("creationRollResult")) $("creationRollResult").textContent = data.playerSession.creationRoll ? `스탯 포인트: ${data.playerSession.creationRoll}` : "스탯 포인트: -";
+    if ($("creationRollCountView")) $("creationRollCountView").textContent = `남은 굴림: ${Math.max(0, Number(data.creation.rollLimit||3) - Number(data.playerSession.creationRollsUsed||0))} / ${data.creation.rollLimit||3}`;
+    if ($("classRollResult")) $("classRollResult").textContent = data.playerSession.classRoll ? `직업 주사위: ${data.playerSession.classRoll}` : "직업 주사위: -";
+    if ($("classRollCountView")) $("classRollCountView").textContent = `직업 굴림 남음: ${Math.max(0, Number(data.creation.classRollLimit||3) - Number(data.playerSession.classRollsUsed||0))} / ${data.creation.classRollLimit||3}`;
+  }
+
+  window.changeCreationStat = function(stat, delta){
+    data.playerSession.creationStats ??= {};
+    data.playerSession.creationStats[stat] ??= 0;
+    if (delta > 0 && data.playerSession.creationRemaining <= 0) return;
+    if (delta < 0 && data.playerSession.creationStats[stat] <= 0) return;
+    data.playerSession.creationStats[stat] += delta;
+    data.playerSession.creationRemaining -= delta;
+    save();
+    renderCreationStatsGrid();
+  };
+
+  function setCreationStatValue(stat, value){
+    data.playerSession.creationStats ??= {};
+    const cleanValue = Math.max(0, Number(value || 0));
+    data.playerSession.creationStats[stat] = cleanValue;
+    if (Number(data.playerSession.creationRoll || 0) > 0) {
+      const used = COMMON_STATS.reduce((sum, s)=>sum + Number(data.playerSession.creationStats?.[s] || 0), 0);
+      if (used > Number(data.playerSession.creationRoll || 0)) {
+        data.playerSession.creationStats[stat] = Math.max(0, cleanValue - (used - Number(data.playerSession.creationRoll || 0)));
+      }
+      const finalUsed = COMMON_STATS.reduce((sum, s)=>sum + Number(data.playerSession.creationStats?.[s] || 0), 0);
+      data.playerSession.creationRemaining = Math.max(0, Number(data.playerSession.creationRoll || 0) - finalUsed);
+    }
+    save();
+    renderCreationStatsGrid();
+  }
+
+  function rollClassDice(){
+    const limit = Math.max(1, Number(data.creation.classRollLimit || 3));
+    data.playerSession.classRollsUsed = Number(data.playerSession.classRollsUsed || 0);
+    if (data.playerSession.classRollsUsed >= limit) {
+      alert(`직업 주사위는 최대 ${limit}번까지 굴릴 수 있습니다.`);
+      return;
+    }
+    const roll = Math.floor(Math.random()*20)+1;
+    data.playerSession.classRollsUsed++;
+    data.playerSession.classRoll = roll;
+    save();
+    renderCreationStatsGrid();
+    renderCreationClassSelect();
+    showToast(`직업 주사위 ${roll} (${data.playerSession.classRollsUsed}/${limit})`);
+  }
+
+  function renderCreationClassSelect(){
+    const sel = $("creationClassSelect");
+    if (!sel) return;
+    const roll = Number(data.playerSession.classRoll || 0);
+    const prev = sel.value;
+    sel.innerHTML = `<option value="">직업 선택 안 함</option>`;
+    data.creation.classes
+      .filter(c=>isClassAllowedByRoll(c, roll))
+      .sort((a,b)=>a.minRoll-b.minRoll)
+      .forEach(c=>sel.add(new Option(`${c.name} (${classRollText(c)})`, c.id)));
+    if (prev) sel.value = prev;
+    renderCreationClassDesc();
+  }
+
+  function renderCreationClassDesc(){
+    const box = $("creationClassDesc");
+    if (!box) return;
+    const c = data.creation.classes.find(x=>x.id === $("creationClassSelect")?.value);
+    if (!c) {
+      box.textContent = "선택 가능한 직업이 없거나 선택하지 않았습니다.";
+      return;
+    }
+    const skills = (c.skillIds || []).map(id=>data.skills.find(s=>s.id===id)?.name).filter(Boolean).join(", ") || "없음";
+    const shop = c.shopNpcId ? data.npcs.find(n=>n.id===c.shopNpcId)?.name || "연결 상점" : "없음";
+    box.textContent = `${c.name}\n조건: ${classRollText(c)}\n${c.desc || ""}\n스탯 보정: ${classStatText(c.statMods)}\n상인 직업: ${c.isMerchant ? "예" : "아니오"} / 연결 상점: ${shop}\n초기 스킬: ${skills}`;
+  }
+
+  function createPlayerFromPortal(){
+    const name = $("newPlayerName")?.value.trim();
+    if (!name) return alert("캐릭터 이름을 입력하세요.");
+
+    const password = $("newPlayerPassword")?.value || "";
+    const stats = baseStats(data.playerSession.creationStats || {});
+    const selectedClass = data.creation.classes.find(c=>c.id === $("creationClassSelect")?.value);
+    if (selectedClass && !isClassAllowedByRoll(selectedClass, Number(data.playerSession.classRoll || 0))) {
+      return alert("현재 직업 주사위 결과로 선택할 수 없는 직업입니다.");
+    }
+    COMMON_STATS.forEach(stat => {
+      stats[stat] = Number(stats[stat] || 0) + Number(selectedClass?.statMods?.[stat] || 0);
+    });
+    const maxHp = 30 + Number(stats.VIT || 0) * 2;
+    const maxMp = 10 + Number(stats.INT || 0) + Number(stats.MND || 0);
+    const remaining = Number(data.playerSession.creationRemaining || 0);
+
+    let gold = 0;
+    let exp = 0;
+    if ($("skipUnusedStatsReward")?.checked) {
+      gold += remaining * Number(data.creation.unusedGold || 0);
+      exp += remaining * Number(data.creation.unusedExp || 0);
+    }
+
+    const player = {
+      id: makeId(),
+      name,
+      password,
+      classId: selectedClass?.id || "",
+      className: selectedClass?.name || "무직",
+      level: 1,
+      exp,
+      nextExp: 100,
+      statPoints: 0,
+      hp: maxHp,
+      maxHp,
+      mp: maxMp,
+      maxMp,
+      gold,
+      hype: 0,
+      status: "정상",
+      memo: "플레이어 화면에서 생성됨",
+      portrait: tempNewPlayerPortrait,
+      stats,
+      conditions: [],
+      disabledWeaponTurns: 0
+    };
+
+    data.players.push(player);
+
+    if (selectedClass?.skillIds?.length) {
+      selectedClass.skillIds.forEach(skillId => {
+        const sk = data.skills.find(s=>s.id===skillId);
+        if (sk) {
+          data.skills.push({...structuredClone(sk), id: makeId(), ownerType:"player", ownerId:player.id, forSale:false});
+        }
+      });
+    }
+
+    if ($("skipUnusedStatsReward")?.checked && remaining > 0 && data.creation.unusedEquipmentId) {
+      const eq = data.equipments.find(e=>e.id===data.creation.unusedEquipmentId);
+      if (eq) data.equipments.push({...structuredClone(eq), id: makeId(), equippedBy:""});
+    }
+
+    data.playerSession.currentPlayerId = player.id;
+    data.playerSession.creationRoll = 0;
+    data.playerSession.creationRollsUsed = 0;
+    data.playerSession.classRoll = 0;
+    data.playerSession.classRollsUsed = 0;
+    data.playerSession.creationRemaining = 0;
+    data.playerSession.creationStats = {};
+    tempNewPlayerPortrait = "";
+    clearInputs(["newPlayerName","newPlayerPassword"]);
+    save();
+    renderAll();
+    showToast("캐릭터 생성 완료");
+  }
+
+  function leavePlayerCharacter(){
+    data.playerSession.currentPlayerId = "";
+    save();
+
+    const createPanel = $("playerCreatePanel");
+    const lobbyPanel = $("playerLobbyPanel");
+    const characterPanel = $("playerCharacterPanel");
+
+    if (createPanel) createPanel.classList.remove("hidden");
+    if (lobbyPanel) lobbyPanel.classList.remove("hidden");
+    if (characterPanel) characterPanel.classList.add("hidden");
+
+    renderPlayerLobbyCards();
+    showToast("캐릭터 선택창으로 돌아왔습니다.");
+  }
+
+  function renderPlayerPortal(){
+    if (data.mode !== "player") return;
+    const current = data.players.find(p=>p.id===data.playerSession.currentPlayerId);
+    $("playerCreatePanel")?.classList.toggle("hidden", !!current);
+    $("playerLobbyPanel")?.classList.toggle("hidden", !!current);
+    $("playerCharacterPanel")?.classList.toggle("hidden", !current);
+    renderPlayerLobbyCards();
+    if (current) {
+      renderCurrentCharacterSheet(current);
+      renderInlineShopForCurrentCharacter();
+    }
+  }
+
+  function renderPlayerLobbyCards(){
+    const box = $("playerLobbyCards");
+    if (!box) return;
+    box.innerHTML = data.players.map(p=>`
+      <div class="player-lobby-card" data-player-id="${p.id}">
+        ${p.portrait ? `<img src="${p.portrait}">` : `<div class="portrait-placeholder">NO<br>PORTRAIT</div>`}
+        <h3>${esc(p.name)}</h3>
+        <p class="muted">Lv.${p.level || 1} / ${esc(p.className || "무직")}</p>
+      </div>
+    `).join("") || `<p class="muted">생성된 캐릭터가 없습니다.</p>`;
+
+  }
+
+  window.loginPlayerCharacter = function(id){
+    const p = data.players.find(x=>x.id===id);
+    if (!p) return;
+    if (p.password) {
+      const input = prompt("캐릭터 비밀번호를 입력하세요.");
+      if (input !== p.password) {
+        alert("비밀번호가 틀렸습니다.");
+        return;
+      }
+    }
+    data.playerSession.currentPlayerId = id;
+    save();
+    renderAll();
+    renderInlineShopForCurrentCharacter();
+  };
+
+  function renderCurrentCharacterSheet(p){
+    const box = $("playerCurrentCharacterSheet");
+    if (!box) return;
+    const hp = getPercent(p.hp,p.maxHp);
+    const mp = getPercent(p.mp,p.maxMp);
+    box.innerHTML = `
+      ${p.portrait ? `<img class="player-current-portrait" src="${p.portrait}">` : `<div class="player-current-portrait portrait-placeholder">NO<br>PORTRAIT</div>`}
+      <h2>${esc(p.name)}</h2>
+      <p class="muted">Lv.${p.level || 1} / ${esc(p.className || "무직")}</p>
+      <div class="stat-line"><span>HP</span><span>${p.hp}/${p.maxHp}</span></div>
+      <div class="small-bar-frame"><div class="hp-bar hp" style="width:${hp}%"></div></div>
+      <div class="stat-line"><span>MP</span><span>${p.mp}/${p.maxMp}</span></div>
+      <div class="small-bar-frame"><div class="hp-bar mp" style="width:${mp}%"></div></div>
+      <p class="player-extra">상태: ${esc(p.status || "정상")}<br>Gold ${p.gold || 0}</p>
+      <h3>스탯</h3>
+      <div class="character-stat-list">
+        ${COMMON_STATS.map(stat=>`<div>${STAT_LABELS[stat]}: ${p.stats?.[stat] || 0}</div>`).join("")}
+      </div>
+      ${Number(p.statPoints||0)>0 ? `<div class="level-up-stat-controls">
+        <h3>레벨업 스탯 증가 / 남은 포인트 ${p.statPoints}</h3>
+        <div class="level-up-stat-grid">
+          ${COMMON_STATS.map(stat=>`<button onclick="playerSpendStatPoint('${p.id}','${stat}')">${STAT_LABELS[stat]} +1</button>`).join("")}
+        </div>
+      </div>` : ""}
+      <h3>인벤토리</h3>
+      <div>${data.items.filter(i=>i.owner===p.name||i.owner==="파티 공용").map(i=>`<div class="status-pill">${esc(i.name)} x${i.qty}</div>`).join("") || "<p class='muted'>아이템 없음</p>"}</div>
+    `;
+  }
+
+  window.playerSpendStatPoint = function(playerId, stat){
+    const p = data.players.find(x=>x.id===playerId);
+    if (!p || Number(p.statPoints||0)<=0) return;
+    p.stats ??= baseStats();
+    p.stats[stat] = Number(p.stats[stat]||0) + 1;
+    p.statPoints--;
+    if (stat === "VIT") p.maxHp += 2;
+    if (stat === "INT" || stat === "MND") p.maxMp += 1;
+    save();
+    renderAll();
+    showToast(`${STAT_LABELS[stat]} 증가`);
+  };
+
+  function renderMerchantShopSetup(){
+    fillMerchantNpcSelect();
+    fillMerchantGoodsSelect();
+    renderMerchantShopList();
+    fillPlayerMerchantSelect();
+  }
+
+  function fillMerchantNpcSelect(){
+    const s = $("merchantShopNpcSelect");
+    if (!s) return;
+    const prev = s.value;
+    s.innerHTML = "";
+    const merchants = data.npcs.filter(n => n.job === "merchant" || n.job === "상인" || !n.job);
+    merchants.forEach(n=>s.add(new Option(n.name,n.id)));
+    if (prev) s.value = prev;
+    renderMerchantShopLookForm();
+  }
+
+  function fillMerchantGoodsSelect(){
+    const s = $("merchantShopGoodsSelect");
+    if (!s) return;
+    const prev = s.value;
+    const type = $("merchantShopType")?.value || "item";
+    s.innerHTML = "";
+    const arr = type==="item"
+      ? data.items
+      : type==="equipment"
+        ? data.equipments
+        : data.skills;
+    arr.forEach(x=>s.add(new Option(`${x.name || "이름 없음"}${x.owner ? " / " + x.owner : ""}`, x.id)));
+    if (prev) s.value = prev;
+  }
+
+  function renderMerchantShopLookForm(){
+    const npcId = $("merchantShopNpcSelect")?.value;
+    if (!npcId) return;
+    const look = data.creation.shopLooks?.[npcId] || {};
+    if ($("merchantShopIntro")) $("merchantShopIntro").value = look.intro || "";
+  }
+
+  function saveMerchantShopLook(){
+    const npcId = $("merchantShopNpcSelect")?.value;
+    if (!npcId) return alert("상인 NPC를 선택하세요.");
+    data.creation.shopLooks ??= {};
+    data.creation.shopLooks[npcId] = {
+      image: tempMerchantShopImage || data.creation.shopLooks[npcId]?.image || "",
+      intro: $("merchantShopIntro")?.value || ""
+    };
+    tempMerchantShopImage = "";
+    save();
+    renderInlineShopForCurrentCharacter();
+    showToast("상점 화면 저장 완료");
+  }
+
+  function addMerchantShopGoods(){
+    const npcId = $("merchantShopNpcSelect")?.value;
+    const type = $("merchantShopType")?.value || "item";
+    const goodsId = $("merchantShopGoodsSelect")?.value;
+    if (!npcId || !goodsId) return alert("상인 NPC와 판매품을 선택하세요.");
+    data.creation.merchantShops.push({
+      id: makeId(),
+      npcId,
+      type,
+      goodsId,
+      price: Number($("merchantShopPrice")?.value||0),
+      stock: $("merchantShopStock")?.value==="" ? null : Number($("merchantShopStock")?.value||0)
+    });
+    clearInputs(["merchantShopPrice","merchantShopStock"]);
+    save();
+    renderMerchantShopSetup();
+    showToast("상인 판매품 추가 완료");
+  }
+
+  function renderMerchantShopList(){
+    const box = $("merchantShopList");
+    if (!box) return;
+    box.innerHTML = data.creation.merchantShops.map(g=>{
+      const npc = data.npcs.find(n=>n.id===g.npcId);
+      const goods = getMerchantGoods(g.type,g.goodsId);
+      return `<div class="list-item">
+        <div class="row-title">${esc(npc?.name||"?")} / ${esc(goods?.name||"?")}</div>
+        <div class="row-meta">${merchantTypeName(g.type)} / ${g.price} Gold / 재고 ${g.stock ?? "무제한"}</div>
+        <button class="small danger" onclick="deleteMerchantShopGoods('${g.id}')">삭제</button>
+      </div>`;
+    }).join("");
+  }
+
+  window.deleteMerchantShopGoods = function(id){
+    if (!confirm("판매품을 삭제할까요?")) return;
+    data.creation.merchantShops = data.creation.merchantShops.filter(x=>x.id!==id);
+    save();
+    renderMerchantShopSetup();
+  };
+
+  function fillPlayerMerchantSelect(){
+    const s = $("playerMerchantSelect");
+    if (!s) return;
+    const prev = s.value;
+    s.innerHTML = "";
+    const merchantIds = new Set(data.creation.merchantShops.map(x=>x.npcId));
+    data.npcs.filter(n=>merchantIds.has(n.id)).forEach(n=>s.add(new Option(n.name,n.id)));
+    if (prev) s.value = prev;
+  }
+
+  function getVisibleMerchantIdForPlayer(){
+    const activeNpcIds = data.activeNpcIds || [];
+    const merchantIds = new Set(data.creation.merchantShops.map(x=>x.npcId));
+    const activeMerchant = activeNpcIds.find(id => merchantIds.has(id));
+    if (activeMerchant) return activeMerchant;
+    return "";
+  }
+
+  function renderInlineShopForCurrentCharacter(){
+    const player = data.players.find(p=>p.id===data.playerSession.currentPlayerId);
+    const panel = $("playerInlineShopPanel");
+    if (!panel) return;
+    const npcId = getVisibleMerchantIdForPlayer();
+    if (!player || !npcId) {
+      panel.classList.add("hidden");
+      return;
+    }
+    const npc = data.npcs.find(n=>n.id===npcId);
+    if (!npc) {
+      panel.classList.add("hidden");
+      return;
+    }
+    $("inlineShopTitle").textContent = `${npc.name}의 상점`;
+    const look = data.creation.shopLooks?.[npcId] || {};
+    $("inlineShopIntro").textContent = look.intro || "판매 목록";
+    const imgBox = $("inlineShopImageBox");
+    if (imgBox) {
+      if (look.image) {
+        imgBox.style.display = "block";
+        imgBox.innerHTML = `<img src="${look.image}">`;
+      } else {
+        imgBox.style.display = "none";
+        imgBox.innerHTML = "";
+      }
+    }
+    renderInlineShopGoods(player, npcId);
+    panel.classList.remove("hidden");
+  }
+
+
+  function renderInlineShopGoods(player, npcId){
+    const box = $("inlineShopGoodsList");
+    if (!box) return;
+    const goodsList = data.creation.merchantShops.filter(g=>g.npcId===npcId);
+    if (!goodsList.length) {
+      box.innerHTML = `<p class="muted">판매 목록이 없습니다.</p>`;
+      return;
+    }
+    box.innerHTML = goodsList.map((g, idx)=>{
+      const goods = getMerchantGoods(g.type,g.goodsId);
+      if (!goods) return "";
+      const price = Number(g.price||0);
+      const enough = Number(player.gold||0) >= price;
+      const inStock = g.stock === null || Number(g.stock) > 0;
+      const canBuy = inStock;
+      const desc = getGoodsDesc(goods, g.type);
+      const stats = getGoodsStatsText(goods, g.type);
+      const img = getGoodsImage(goods, g.type);
+      return `<div class="inline-shop-item">
+        <div class="inline-shop-index">${idx+1}</div>
+        ${img ? `<img class="shop-goods-thumb" src="${img}">` : `<div class="shop-goods-thumb-placeholder">NO<br>IMG</div>`}
+        <div>
+          <div class="inline-shop-name">${esc(goods.name||"?")}</div>
+          <div class="inline-shop-desc">${esc(desc||"")}</div>
+          <div class="inline-shop-stats">${stats}</div>
+        </div>
+        <div class="inline-shop-price-box">
+          <div class="inline-shop-price ${enough ? "" : "not-enough"}">${price} Gold</div>
+          <div class="inline-shop-stock">재고 ${g.stock ?? "무제한"}</div>
+          <button class="inline-shop-buy-btn" ${canBuy ? "" : "disabled"} onclick="buyFromMerchant('${g.id}')">구매</button>
+        </div>
+      </div>`;
+    }).join("");
+  }
+
+
+  function openMainSceneShop(npcId){
+    const npc = data.npcs.find(n=>n.id===npcId);
+    if (!npc) return alert("상인 NPC를 찾을 수 없습니다.");
+    const panel = $("mainSceneShopPanel");
+    if (!panel) return;
+    $("mainSceneShopTitle").textContent = `${npc.name}의 상점`;
+    const look = data.creation.shopLooks?.[npcId] || {};
+    $("mainSceneShopIntro").textContent = look.intro || "판매 목록";
+    const bg = $("mainSceneShopBg");
+    if (bg) {
+      if (look.image) {
+        bg.classList.remove("no-image");
+        bg.style.backgroundImage = `url('${look.image}')`;
+      } else {
+        bg.classList.add("no-image");
+        bg.style.backgroundImage = "";
+      }
+    }
+    renderMainSceneShopGoods(npcId);
+    panel.classList.remove("hidden");
+    showToast(`${npc.name} 상점을 열었습니다.`);
+  }
+
+  function closeMainSceneShop(){
+    $("mainSceneShopPanel")?.classList.add("hidden");
+  }
+
+  function getFirstPlayerForMainShop(){
+    const current = data.players.find(p=>p.id===data.playerSession?.currentPlayerId);
+    return current || data.players[0] || null;
+  }
+
+  function renderMainSceneShopGoods(npcId){
+    const box = $("mainSceneShopGoodsList");
+    if (!box) return;
+    const player = getFirstPlayerForMainShop();
+    const goodsList = data.creation.merchantShops.filter(g=>g.npcId===npcId);
+    if (!goodsList.length) {
+      box.innerHTML = `<p class="muted">판매 목록이 없습니다. 마스터패널의 상인 판매 목록 설정에서 판매품을 추가하세요.</p>`;
+      return;
+    }
+    box.innerHTML = goodsList.map((g, idx)=>{
+      const goods = getMerchantGoods(g.type,g.goodsId);
+      if (!goods) return "";
+      const price = Number(g.price||0);
+      const enough = player ? Number(player.gold||0) >= price : false;
+      const inStock = g.stock === null || Number(g.stock) > 0;
+      const canBuy = !!player && inStock;
+      const desc = getGoodsDesc(goods, g.type);
+      const stats = getGoodsStatsText(goods, g.type);
+      const img = getGoodsImage(goods, g.type);
+      return `<div class="inline-shop-item">
+        <div class="inline-shop-index">${idx+1}</div>
+        ${img ? `<img class="shop-goods-thumb" src="${img}">` : `<div class="shop-goods-thumb-placeholder">NO<br>IMG</div>`}
+        <div>
+          <div class="inline-shop-name">${esc(goods.name||"?")}</div>
+          <div class="inline-shop-desc">${esc(desc||"")}</div>
+          <div class="inline-shop-stats">${stats}</div>
+        </div>
+        <div class="inline-shop-price-box">
+          <div class="inline-shop-price ${enough ? "" : "not-enough"}">${price} Gold</div>
+          <div class="inline-shop-stock">재고 ${g.stock ?? "무제한"}</div>
+          <button class="inline-shop-buy-btn" ${canBuy ? "" : "disabled"} onclick="buyMainSceneShop('${g.id}')">구매</button>
+        </div>
+      </div>`;
+    }).join("");
+  }
+
+  window.openMainSceneShop = openMainSceneShop;
+  window.closeMainSceneShop = closeMainSceneShop;
+  window.buyMainSceneShop = function(shopId){
+    const player = getFirstPlayerForMainShop();
+    const g = data.creation.merchantShops.find(x=>x.id===shopId);
+    if (!player) return alert("구매할 플레이어가 없습니다. 플레이어 캐릭터를 먼저 생성하거나 선택하세요.");
+    if (!g) return;
+    const goods = getMerchantGoods(g.type,g.goodsId);
+    if (!goods) return alert("상품을 찾을 수 없습니다.");
+    const price = Number(g.price||0);
+    if (!confirm(`${price}골드로 ${goods.name}을(를) 구매하시겠습니까?`)) return;
+    if (Number(player.gold||0) < price) return alert("구매 실패: 골드가 부족합니다.");
+    if (g.stock !== null && Number(g.stock)<=0) return alert("구매 실패: 재고가 없습니다.");
+    player.gold -= price;
+    if (g.stock !== null) g.stock--;
+    if (g.type === "item") {
+      data.items.push({...structuredClone(goods), id:makeId(), owner:player.name, used:false});
+    } else if (g.type === "equipment") {
+      data.equipments.push({...structuredClone(goods), id:makeId(), owner:player.name, equippedBy:""});
+    } else if (g.type === "skill") {
+      data.skills.push({...structuredClone(goods), id:makeId(), ownerType:"player", ownerId:player.id, forSale:false});
+    }
+    save();
+    showToast(`${goods.name} 구매 완료`);
+    renderAll();
+    renderMainSceneShopGoods(g.npcId);
+  };
+
+
+
+  function isForgeNpc(n){ return !!n && (n.job === "repair" || n.job === "강화/수리"); }
+  function getForgeConfig(npcId){ data.forges ??= {}; data.forges[npcId] = normalizeForgeConfig(data.forges[npcId] || {}); return data.forges[npcId]; }
+  function fillForgeSelects(){ const s=$("forgeNpcSelect"); if(!s)return; const prev=s.value; s.innerHTML=""; data.npcs.filter(isForgeNpc).forEach(n=>s.add(new Option(n.name,n.id))); if(prev)s.value=prev; renderForgeConfigForm(); }
+  function renderForgeConfigForm(){ const npcId=$("forgeNpcSelect")?.value; if(!npcId)return; const cfg=getForgeConfig(npcId); if($("forgeIntro"))$("forgeIntro").value=cfg.intro||""; if($("forgeUpgradePrice"))$("forgeUpgradePrice").value=cfg.upgradePrice; if($("forgeRepairPrice"))$("forgeRepairPrice").value=cfg.repairPrice; if($("forgeUpgradeMode"))$("forgeUpgradeMode").value=cfg.mode; if($("forgeSuccessChance"))$("forgeSuccessChance").value=cfg.successChance; if($("forgeDestroyFrom"))$("forgeDestroyFrom").value=cfg.destroyFrom; }
+  function saveForgeConfig(){ const npcId=$("forgeNpcSelect")?.value; if(!npcId)return alert("강화/수리 NPC를 먼저 선택하세요."); data.forges??={}; const prev=data.forges[npcId]||{}; data.forges[npcId]=normalizeForgeConfig({image:tempForgeImage||prev.image||"",intro:$("forgeIntro")?.value||"",upgradePrice:Number($("forgeUpgradePrice")?.value||0),repairPrice:Number($("forgeRepairPrice")?.value||0),mode:$("forgeUpgradeMode")?.value||"chance",successChance:Number($("forgeSuccessChance")?.value||70),destroyFrom:Number($("forgeDestroyFrom")?.value||8)}); tempForgeImage=""; save(); renderForgeConfigList(); renderInlineForgeForCurrentCharacter(); showToast("대장간 설정 저장 완료"); }
+  function renderForgeConfigList(){ const box=$("forgeConfigList"); if(!box)return; const ids=Object.keys(data.forges||{}); box.innerHTML=ids.map(id=>{ const npc=data.npcs.find(n=>n.id===id); const cfg=getForgeConfig(id); return '<div class="list-item"><div class="row-title">'+esc(npc?.name||"대장간")+'</div><div class="row-meta">강화 '+cfg.upgradePrice+' Gold / 수리 1당 '+cfg.repairPrice+' Gold / '+(cfg.mode==="timing"?"타이밍":"단순확률")+' / 파괴 '+cfg.destroyFrom+'강부터</div></div>'; }).join("") || '<p class="muted">저장된 대장간 설정이 없습니다.</p>'; }
+  function getForgeTargetPlayer(){ return data.players.find(p=>p.id===data.playerSession?.currentPlayerId) || data.players[0] || null; }
+  function getVisibleForgeIdForPlayer(){ const active=data.activeNpcIds||[]; return active.find(id=>isForgeNpc(data.npcs.find(n=>n.id===id))) || ""; }
+  function getOwnedEquipment(player, weaponOnly=false){ if(!player)return []; return data.equipments.filter(eq=>{ const mine=eq.owner===player.name || eq.equippedBy===player.name || (!eq.owner && !eq.equippedBy); return mine && (!weaponOnly || eq.type==="weapon"); }); }
+  function openMainSceneForge(npcId){ const npc=data.npcs.find(n=>n.id===npcId); if(!npc)return alert("대장간 NPC를 찾을 수 없습니다."); currentForgeState={npcId,tab:"enhance",selectedEquipmentId:"",listOpen:false,surface:"main"}; renderForgeSurface(npcId,"main"); $("mainSceneForgePanel")?.classList.remove("hidden"); showToast((npc.name||"대장간")+" 대장간을 열었습니다."); }
+  function closeMainSceneForge(){ $("mainSceneForgePanel")?.classList.add("hidden"); }
+  window.openMainSceneForge=openMainSceneForge; window.closeMainSceneForge=closeMainSceneForge;
+  function renderInlineForgeForCurrentCharacter(){ const player=data.players.find(p=>p.id===data.playerSession.currentPlayerId); const panel=$("playerInlineForgePanel"); if(!panel)return; const npcId=getVisibleForgeIdForPlayer(); if(!player||!npcId){ panel.classList.add("hidden"); return; } if(currentForgeState.surface!=="player" || currentForgeState.npcId!==npcId){ currentForgeState={npcId,tab:"enhance",selectedEquipmentId:"",listOpen:false,surface:"player"}; } renderForgeSurface(npcId,"player"); panel.classList.remove("hidden"); }
+  function renderForgeSurface(npcId,surface){ const npc=data.npcs.find(n=>n.id===npcId); const cfg=getForgeConfig(npcId); const title=surface==="player"?$("playerForgeTitle"):$("mainSceneForgeTitle"); const intro=surface==="player"?$("playerForgeIntro"):$("mainSceneForgeIntro"); if(title)title.textContent=(npc?.name||"대장간")+"의 대장간"; if(intro)intro.textContent=cfg.intro||"강화와 수리를 진행할 수 있습니다."; if(surface==="main"){ const bg=$("mainSceneForgeBg"); if(bg){ if(cfg.image){ bg.classList.remove("no-image"); bg.style.backgroundImage="url('"+cfg.image+"')"; } else { bg.classList.add("no-image"); bg.style.backgroundImage=""; } } } else { const imgBox=$("playerForgeImageBox"); if(imgBox){ if(cfg.image){ imgBox.style.display="block"; imgBox.innerHTML='<img src="'+cfg.image+'">'; } else { imgBox.style.display="none"; imgBox.innerHTML=""; } } } renderForgeContent(npcId,surface); }
+  function renderForgeContent(npcId,surface){ const box=surface==="player"?$("playerForgeContent"):$("mainSceneForgeContentBox"); if(!box)return; const player=getForgeTargetPlayer(); if(!player){ box.innerHTML='<p class="muted">강화/수리 대상 캐릭터를 먼저 선택하세요.</p>'; return; } const tab=currentForgeState.tab||"enhance"; box.innerHTML='<div class="forge-tabs"><button class="'+(tab==="enhance"?"active":"")+'" onclick="setForgeTab(\''+npcId+'\',\'enhance\',\''+surface+'\')">강화</button><button class="'+(tab==="repair"?"active":"")+'" onclick="setForgeTab(\''+npcId+'\',\'repair\',\''+surface+'\')">수리</button></div>'+(tab==="repair"?renderForgeRepairTab(player,npcId,surface):renderForgeEnhanceTab(player,npcId,surface)); }
+  function renderForgeEnhanceTab(player,npcId,surface){ const cfg=getForgeConfig(npcId); const weapons=getOwnedEquipment(player,true); const selected=weapons.find(e=>e.id===currentForgeState.selectedEquipmentId); const list=currentForgeState.listOpen?'<div class="forge-equipment-list">'+(weapons.map(eq=>'<button onclick="selectForgeEquipment(\''+npcId+'\',\''+eq.id+'\',\''+surface+'\')">'+esc(eq.name)+' +'+(eq.upgradeLevel||0)+' / 내구도 '+eq.durability+'/'+eq.maxDurability+'</button>').join("") || '<p class="muted">소유한 무기가 없습니다.</p>')+'</div>':""; const timing=cfg.mode==="timing"?'<div class="forge-timing-wrap"><div class="forge-timing-bar '+(Number(selected?.upgradeLevel||0)>=cfg.destroyFrom?"danger-live":"")+'"><span class="destroy-zone left"></span><span class="success-zone">+2</span><span class="destroy-zone right"></span><span class="timing-pointer"></span></div><div class="row-meta">타이밍 방식: 중앙 금색 영역은 +2강, 붉은 영역은 '+cfg.destroyFrom+'강 이상부터 파괴입니다.</div></div>':'<div class="row-meta">단순확률 방식: 성공률 '+cfg.successChance+'% / 성공 시 +1강</div>'; const slot=selected?(selected.image?'<img src="'+selected.image+'">':"")+'<strong>'+esc(selected.name)+'</strong><span>+'+(selected.upgradeLevel||0)+'</span>':'<strong>강화할 무기 선택</strong><span>클릭해서 목록 열기</span>'; return '<div class="forge-workbench"><button class="forge-equipment-slot" onclick="toggleForgeEquipmentList(\''+npcId+'\',\''+surface+'\')">'+slot+'</button>'+list+timing+'<button class="forge-primary-btn" '+(selected?"":"disabled")+' onclick="runForgeEnhance(\''+npcId+'\',\''+surface+'\')">강화 시작 ('+cfg.upgradePrice+' Gold)</button></div>'; }
+  function renderForgeRepairTab(player,npcId,surface){ const cfg=getForgeConfig(npcId); const items=getOwnedEquipment(player,false); return '<div class="forge-equipment-list forge-repair-list">'+(items.map(eq=>{ const missing=Math.max(0,Number(eq.maxDurability||0)-Number(eq.durability||0)); const cost=missing*Number(cfg.repairPrice||0); const img=eq.image?'<img src="'+eq.image+'">':'<div class="shop-goods-thumb-placeholder">NO<br>IMG</div>'; return '<div class="forge-repair-row">'+img+'<div><strong>'+esc(eq.name)+' +'+(eq.upgradeLevel||0)+'</strong><div class="row-meta">내구도 '+eq.durability+'/'+eq.maxDurability+' / 수리비 '+cost+' Gold</div></div><button '+(missing>0?"":"disabled")+' onclick="repairForgeEquipment(\''+npcId+'\',\''+eq.id+'\',\''+surface+'\')">수리</button></div>'; }).join("") || '<p class="muted">수리할 장비가 없습니다.</p>')+'</div>'; }
+  window.setForgeTab=function(npcId,tab,surface){ currentForgeState={...currentForgeState,npcId,tab,listOpen:false,surface}; renderForgeSurface(npcId,surface); };
+  window.toggleForgeEquipmentList=function(npcId,surface){ currentForgeState={...currentForgeState,npcId,surface,listOpen:!currentForgeState.listOpen}; renderForgeSurface(npcId,surface); };
+  window.selectForgeEquipment=function(npcId,equipmentId,surface){ currentForgeState={...currentForgeState,npcId,surface,selectedEquipmentId:equipmentId,listOpen:false}; renderForgeSurface(npcId,surface); };
+  function addForgeUpgrade(eq,gain){ eq.stats=baseStats(eq.stats); eq.upgradeLevel=Number(eq.upgradeLevel||0)+gain; COMMON_STATS.forEach(stat=>eq.stats[stat]=Number(eq.stats[stat]||0)+gain); eq.maxDurability=Number(eq.maxDurability||eq.durability||10)+gain; eq.durability=Math.min(eq.maxDurability,Number(eq.durability||0)+gain); }
+  window.runForgeEnhance=function(npcId,surface){ const player=getForgeTargetPlayer(); const cfg=getForgeConfig(npcId); const eq=data.equipments.find(e=>e.id===currentForgeState.selectedEquipmentId); if(!player||!eq)return alert("강화할 무기를 선택하세요."); if(Number(player.gold||0)<Number(cfg.upgradePrice||0))return alert("강화 실패: 골드가 부족합니다."); player.gold-=Number(cfg.upgradePrice||0); if(cfg.mode==="timing"){ const pos=(Date.now()%2200)/22; const level=Number(eq.upgradeLevel||0); const destroyLive=level>=Number(cfg.destroyFrom||0); if(destroyLive&&((pos>=37&&pos<=44)||(pos>=56&&pos<=63))){ data.equipments=data.equipments.filter(e=>e.id!==eq.id); currentForgeState.selectedEquipmentId=""; addLog(player.name+"의 "+eq.name+" 강화 실패: 파괴"); save(); renderAll(); renderForgeSurface(npcId,surface); alert("붉은 파괴 구간에 닿아 장비가 파괴되었습니다."); return; } const gain=(pos>=47&&pos<=53)?2:1; addForgeUpgrade(eq,gain); addLog(player.name+"의 "+eq.name+" 타이밍 강화 +"+gain); showToast(eq.name+" +"+gain+"강 성공"); } else { const ok=Math.random()*100<Number(cfg.successChance||0); if(ok){ addForgeUpgrade(eq,1); addLog(player.name+"의 "+eq.name+" 강화 성공"); showToast(eq.name+" 강화 성공"); } else { addLog(player.name+"의 "+eq.name+" 강화 실패"); alert("강화에 실패했습니다. 골드는 소모되었습니다."); } } save(); renderAll(); renderForgeSurface(npcId,surface); };
+  window.repairForgeEquipment=function(npcId,equipmentId,surface){ const player=getForgeTargetPlayer(); const cfg=getForgeConfig(npcId); const eq=data.equipments.find(e=>e.id===equipmentId); if(!player||!eq)return; const missing=Math.max(0,Number(eq.maxDurability||0)-Number(eq.durability||0)); const cost=missing*Number(cfg.repairPrice||0); if(missing<=0)return alert("이미 완전히 수리되어 있습니다."); if(Number(player.gold||0)<cost)return alert("수리 실패: 골드가 부족합니다."); if(!confirm(cost+"골드로 "+eq.name+"을(를) 수리하시겠습니까?"))return; player.gold-=cost; eq.durability=eq.maxDurability; addLog(player.name+"의 "+eq.name+" 수리 완료"); save(); renderAll(); renderForgeSurface(npcId,surface); showToast("수리 완료"); };
+
+
+  function openPlayerShop(){
+    const current = data.players.find(p=>p.id===data.playerSession.currentPlayerId);
+    const npc = data.npcs.find(n=>n.id===$("playerMerchantSelect")?.value);
+    if (!current) return alert("캐릭터에 접속해주세요.");
+    if (!npc) return alert("상인을 선택하세요.");
+    $("playerShopTitle").textContent = `${npc.name}의 상점`;
+    renderPlayerShopGoods(current, npc.id);
+    $("playerShopModal")?.classList.remove("hidden");
+  }
+
+  function renderPlayerShopGoods(player, npcId){
+    const box = $("playerShopGoodsList");
+    if (!box) return;
+    const goodsList = data.creation.merchantShops.filter(g=>g.npcId===npcId);
+    if (!goodsList.length) {
+      box.innerHTML = `<p class="muted">판매 목록이 없습니다.</p>`;
+      return;
+    }
+    box.innerHTML = goodsList.map(g=>{
+      const goods = getMerchantGoods(g.type,g.goodsId);
+      if (!goods) return "";
+      const price = Number(g.price||0);
+      const enough = Number(player.gold||0) >= price;
+      const inStock = g.stock === null || Number(g.stock) > 0;
+      const canBuy = inStock;
+      const img = getGoodsImage(goods, g.type);
+      const desc = getGoodsDesc(goods, g.type);
+      const stats = getGoodsStatsText(goods, g.type);
+      return `<div class="shop-goods-row">
+        ${img ? `<img src="${img}">` : `<div class="shop-goods-image-placeholder">NO IMAGE</div>`}
+        <div>
+          <div class="shop-goods-title">${esc(goods.name||"?")}</div>
+          <div class="shop-goods-desc">${esc(desc||"")}</div>
+          <div class="shop-goods-stats">${stats}</div>
+        </div>
+        <div class="shop-price-box">
+          <div class="shop-price ${enough ? "" : "not-enough"}">${price} Gold</div>
+          <div class="shop-stock">재고 ${g.stock ?? "무제한"}</div>
+          <button class="shop-buy-btn" ${canBuy ? "" : "disabled"} onclick="buyFromMerchant('${g.id}')">구매</button>
+        </div>
+      </div>`;
+    }).join("");
+  }
+
+  window.buyFromMerchant = function(shopId){
+    const player = data.players.find(p=>p.id===data.playerSession.currentPlayerId);
+    const g = data.creation.merchantShops.find(x=>x.id===shopId);
+    if (!player || !g) return;
+    const goods = getMerchantGoods(g.type,g.goodsId);
+    if (!goods) return;
+    const price = Number(g.price||0);
+    if (!confirm(`${price}골드로 ${goods.name}을(를) 구매하시겠습니까?`)) return;
+    if (Number(player.gold||0) < price) return alert("구매 실패: 골드가 부족합니다.");
+    if (g.stock !== null && Number(g.stock)<=0) return alert("구매 실패: 재고가 없습니다.");
+    player.gold -= price;
+    if (g.stock !== null) g.stock--;
+    if (g.type === "item") {
+      data.items.push({...structuredClone(goods), id:makeId(), owner:player.name, used:false});
+    } else if (g.type === "equipment") {
+      data.equipments.push({...structuredClone(goods), id:makeId(), owner:player.name, equippedBy:""});
+    } else if (g.type === "skill") {
+      data.skills.push({...structuredClone(goods), id:makeId(), ownerType:"player", ownerId:player.id, forSale:false});
+    }
+    save();
+    showToast(`${goods.name} 구매 완료`);
+    renderAll();
+    renderInlineShopForCurrentCharacter();
+  };
+
+  function getMerchantGoods(type,id){
+    return (type==="item" ? data.items : type==="equipment" ? data.equipments : data.skills).find(x=>x.id===id);
+  }
+
+  function merchantTypeName(type){
+    return {item:"아이템", equipment:"장비", skill:"스킬"}[type] || type;
+  }
+
+  function getGoodsImage(goods,type){
+    if (!goods) return "";
+    return goods.image || goods.portrait || "";
+  }
+
+  function getGoodsDesc(goods,type){
+    if (!goods) return "";
+    return goods.desc || goods.memo || goods.skillMemo || "";
+  }
+
+  function getGoodsStatsText(goods,type){
+    if (!goods) return "";
+    const statText = goods.stats ? COMMON_STATS.filter(s=>Number(goods.stats[s]||0)!==0).map(s=>`${STAT_LABELS[s]} ${goods.stats[s]>0?"+":""}${goods.stats[s]}`).join(" / ") : "";
+    if (type==="equipment") {
+      const res = goods.resists ? `내성 참격 ${goods.resists.slash||0} / 관통 ${goods.resists.pierce||0} / 타격 ${goods.resists.blunt||0} / 특수 ${goods.resists.special||0}` : "";
+      return [statText, res, goods.attackType ? `공격유형 ${attackTypeName(goods.attackType)}` : ""].filter(Boolean).join("<br>");
+    }
+    if (type==="skill") {
+      return `${skillName(goods.type)} / ${STAT_LABELS[goods.stat]||goods.stat} / MP ${goods.mpCost||0}`;
+    }
+    return statText || "추가 능력치 없음";
+  }
+
+  // 기존 player view 렌더에 현재 캐릭터 포털 추가
+  function exportData(){ const blob=new Blob([JSON.stringify(data,null,2)],{type:"application/json"}); const url=URL.createObjectURL(blob); const a=document.createElement("a"); a.href=url; a.download="trpg-dashboard-backup-v13.json"; a.click(); URL.revokeObjectURL(url); }
+  function importData(e){ const file=e.target.files[0]; if(!file)return; const r=new FileReader(); r.onload=ev=>{ try{ const parsed=JSON.parse(ev.target.result); normalize(parsed); data=parsed; save(); renderAll(); alert("불러오기 완료"); }catch{ alert("불러오기 실패"); } }; r.readAsText(file); }
+  function addLog(text){ data.diceLog.unshift(String(text)); data.diceLog=data.diceLog.slice(0,300); save(); renderLog(); }
+  function renderLog(){ const box=$("diceLog"); if(!box)return; box.innerHTML=""; data.diceLog.forEach(l=>{ const li=document.createElement("li"); li.textContent=l; box.appendChild(li); }); }
+  function getAllActors(){ return [...data.players.map(p=>({type:"player",id:p.id,name:p.name,actor:p})),...data.npcs.map(n=>({type:"npc",id:n.id,name:n.name,actor:n})),...data.bosses.map(b=>({type:"boss",id:b.id,name:b.name,actor:b}))]; }
+  function actorValue(type,id){ return `${type}:${id}`; }
+  function findActor(v){ const [type,id]=String(v||"").split(":"); const arr=type==="player"?data.players:type==="npc"?data.npcs:data.bosses; const actor=arr.find(x=>x.id===id); return actor?{type,id,actor}:null; }
+  function getPercent(cur,max){ if(!max)return 0; return Math.max(0,Math.min(100,Math.round((cur/max)*100))); }
+  function esc(v){ return String(v??"").replaceAll("&","&amp;").replaceAll("<","&lt;").replaceAll(">","&gt;").replaceAll('"',"&quot;").replaceAll("'","&#039;"); }
+  function escAttr(v){ return String(v??"").replaceAll("\\","\\\\").replaceAll("'","\\'").replaceAll('"',"&quot;"); }
+  function typeName(t){ return {player:"플레이어",npc:"NPC",boss:"보스"}[t]||t; }
+  function jobTitle(j){ return {merchant:"상인",enchanter:"인첸트",repair:"강화/수리",quest:"퀘스트수주",god:"신"}[j]||j||"상인"; }
+  function skillName(t){ return {check:"일반 판정",damage:"피해",heal:"회복",status:"상태이상",cleanse:"해제"}[t]||t; }
+  function effectName(t){ return {dot:"턴 피해",hot:"턴 회복",shield:"보호막",statUp:"능력치 증가",statDown:"능력치 감소",maxHpDown:"최대체력 감소"}[t]||t; }
+  function fumbleName(t){ return {weaponDurability:"무기 내구도",armorDurability:"방어구 내구도",allyDamage:"아군 피해",statDown:"스탯 감소",weaponDisabled:"무기 사용불가",hpDown:"체력 감소",maxHpDown:"최대체력 감소"}[t]||t; }
+  function attackTypeName(t){ return {slash:"참격",pierce:"관통",blunt:"타격",special:"특수"}[t]||t||"참격"; }
+  function shopTypeName(t){ return {item:"아이템",equipment:"장비",skill:"스킬"}[t]||t; }
+  function worldEventName(t){ return {condition:"전체 상태이상",damage:"전체 피해",heal:"전체 회복",weather:"날씨 변경",time:"시간 변경",faction:"세력 평판 변화"}[t]||t; }
+  function updateHudBar(){
+    if(!$("hudTurn")) return;
+    $("hudTurn").textContent = `ROUND ${data.round || 1} / TURN ${(data.currentTurn||0)+1}`;
+    $("hudWeather").textContent = `날씨 ${data.worldState?.weather || "-"}`;
+    $("hudTime").textContent = `시간 ${data.worldState?.time || "-"}`;
+  }
+
+  window.TRPGDashboard = {
+    get data(){ return data; },
+    renderAll,
+    setMode,
+    screenEffect
+  };
+});

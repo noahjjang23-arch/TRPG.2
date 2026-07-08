@@ -1,0 +1,1039 @@
+<!DOCTYPE html>
+<html lang="ko">
+
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>TRPG MASTER DASHBOARD v13</title>
+  <link rel="stylesheet" href="style.css" />
+</head>
+
+<body>
+  <div class="top-hud clean-top-hud">
+    <div class="hud-left">
+      <span id="hudTurn">TURN -</span>
+      <span id="hudWeather">날씨 -</span>
+      <span id="hudTime">시간 -</span>
+    </div>
+    <div class="hud-center">
+      <button id="toggleLogBtn">로그</button>
+      <button id="openPlayerViewBtn">플레이어 HUD</button>
+    </div>
+    <div class="hud-right">
+      <span id="syncStatusIndicator" class="sync-status disconnected">● 로컬 단독 플레이 중</span>
+    </div>
+  </div>
+  <section id="modeScreen" class="mode-screen">
+    <div class="mode-card">
+      <h1>TRPG MASTER DASHBOARD</h1>
+      <p class="muted">개인용 TRPG 진행 도구 v13</p>
+      <div class="mode-actions">
+        <button id="enterMasterBtn">마스터로 접속</button>
+        <button id="enterPlayerBtn">플레이어로 접속</button>
+      </div>
+      <!-- 실시간 멀티플레이 연동 패널 -->
+      <div class="sync-panel-card">
+        <h3>실시간 멀티플레이 연동</h3>
+        <div id="syncRoomInfo">
+          <input type="text" id="syncRoomInput" placeholder="방 코드 입력" style="width: 100px; display:inline-block; margin-right: 5px;" />
+          <button class="small" id="joinRoomBtn">방 참가</button>
+          <button class="small primary" id="createRoomBtn">새 방 만들기</button>
+        </div>
+      </div>
+      <p class="muted small-text">정적 웹사이트 / localStorage 저장 / GitHub Pages 사용 가능</p>
+    </div>
+  </section>
+
+  <section id="masterScreen" class="hidden">
+    <header class="topbar">
+      <div>
+        <h1>MASTER SETUP</h1>
+        <p>맵, 캐릭터, 보스, 장비, 스킬, 상태이상, 펌블 설정</p>
+      </div>
+      <div class="header-actions">
+        <button id="goModeFromMasterBtn">처음 화면</button>
+        <button id="startGameBtn">메인 화면</button>
+        <button id="exportBtn">백업 내보내기</button>
+        <label class="file-button">백업 불러오기<input id="importFile" type="file" accept="application/json" hidden /></label>
+        <button id="partialResetBtn" class="danger">일부 데이터 초기화</button>
+        <button id="resetAllBtn" class="danger">전체 초기화</button>
+      </div>
+    </header>
+
+    <nav class="master-category-nav">
+      <button data-category="world">월드/맵</button>
+      <button data-category="actors">캐릭터/NPC/보스</button>
+      <button data-category="combat">전투/스킬/상태</button>
+      <button data-category="equipment">장비/상점/강화</button>
+      <button data-category="story">연출/스토리/세션</button>
+      <button data-category="all">전체 보기</button>
+    </nav>
+
+    <section class="master-security-card card">
+      <h2>마스터 접속 설정</h2>
+      <p class="muted">비밀번호를 비워두면 마스터 접속 시 비밀번호를 묻지 않습니다.</p>
+      <input id="masterPasswordInput" type="password" placeholder="마스터 접속 비밀번호" />
+      <button id="saveMasterPasswordBtn">비밀번호 적용</button>
+      <button id="clearMasterPasswordBtn" class="danger">비밀번호 해제</button>
+      <div id="masterPasswordStatus" class="row-meta">현재 상태: 비밀번호 없음</div>
+    </section>
+
+    <main class="setup-grid">
+      <section id="cat-world" class="category-divider" data-category="world">
+        <h2>월드 / 맵 / 이벤트</h2>
+      </section>
+
+      <section class="card">
+        <h2>맵 설정</h2>
+        <input id="mapName" placeholder="맵 이름 / 지역 이름" />
+        <textarea id="mapDesc" placeholder="맵 설명 / 지역 묘사"></textarea>
+        <input id="mapBgm" placeholder="BGM 파일 URL 또는 mp3 주소" />
+        <label class="file-button wide">장면 이미지 업로드<input id="mapImageFile" type="file" accept="image/*"
+            hidden /></label>
+        <h3>맵 상태이상 효과</h3>
+        <select id="mapConditionSelect"></select>
+        <input id="mapEveryTurns" type="number" placeholder="몇 턴마다 적용? 예: 2" />
+        <input id="mapConditionDuration" type="number" placeholder="적용 시 지속 턴" />
+        <button id="addMapEffectBtn">맵 효과 추가</button>
+        <div id="mapEffectPreview" class="mini-list"></div>
+        <button id="addMapBtn">맵 저장 / 수정</button>
+        <div id="mapList" class="list-box"></div>
+      </section>
+
+      <section id="cat-combat" class="category-divider" data-category="combat">
+        <h2>전투 / 스킬 / 상태</h2>
+      </section>
+
+      <section class="card">
+        <h2>상태이상 설정</h2>
+        <input id="conditionName" placeholder="상태이상 이름" />
+        <select id="conditionStat"></select>
+        <select id="conditionEffect">
+          <option value="dot">턴마다 체력 감소</option>
+          <option value="hot">턴마다 체력 회복</option>
+          <option value="shield">보호막</option>
+          <option value="statUp">능력치 증가</option>
+          <option value="statDown">능력치 감소</option>
+          <option value="maxHpDown">최대체력 감소</option>
+        </select>
+        <input id="conditionValue" type="number" placeholder="효과 수치" />
+        <input id="conditionDuration" type="number" placeholder="기본 지속 턴" />
+        <textarea id="conditionDesc" placeholder="설명"></textarea>
+        <button id="addConditionBtn">상태이상 저장 / 수정</button>
+        <div id="conditionList" class="list-box"></div>
+      </section>
+
+      <section class="card">
+        <h2>스킬 설정</h2>
+        <select id="skillOwner"></select>
+        <label class="check-row"><input id="skillUnassigned" type="checkbox" /> 아직 플레이어/NPC에게 지급하지 않음</label>
+        <label class="check-row"><input id="skillForSale" type="checkbox" /> 상점 판매 가능 스킬</label>
+        <input id="skillPrice" type="number" placeholder="스킬 가격" />
+        <input id="skillName" placeholder="스킬 이름" />
+        <select id="skillType">
+          <option value="check">일반 판정</option>
+          <option value="damage">피해</option>
+          <option value="heal">회복</option>
+          <option value="status">상태이상 적용</option>
+          <option value="cleanse">상태이상 해제</option>
+        </select>
+        <select id="skillStat"></select>
+        <input id="skillMpCost" type="number" placeholder="MP 소모" />
+        <input id="skillBonus" type="number" placeholder="스킬 추가 보정" />
+        <input id="skillAmount" type="number" placeholder="기본 피해/회복량, 비우면 판정 결과" />
+        <select id="skillCondition"></select>
+        <textarea id="skillDesc" placeholder="스킬 설명"></textarea>
+        <button id="addSkillBtn">스킬 저장 / 수정</button>
+        <div id="skillList" class="list-box"></div>
+      </section>
+
+      <section id="cat-actors" class="category-divider" data-category="actors">
+        <h2>캐릭터 / NPC / 보스</h2>
+      </section>
+
+      <section class="card">
+        <h2>플레이어 캐릭터 생성 설정</h2>
+        <p class="muted">플레이어 접속 시 캐릭터 생성에 쓰이는 규칙입니다.</p>
+        <input id="creationDiceSides" type="number" placeholder="초기 스탯 주사위 면수 예: 20" />
+        <input id="creationRollLimit" type="number" placeholder="초기 스탯 주사위 굴림 가능 횟수" />
+        <input id="classRollLimit" type="number" placeholder="직업 주사위 굴림 가능 횟수" />
+        <input id="unusedStatGold" type="number" placeholder="미사용 스탯 1당 보상 Gold" />
+        <input id="unusedStatExp" type="number" placeholder="미사용 스탯 1당 보상 EXP" />
+        <select id="unusedStatEquipment"></select>
+        <button id="saveCreationRuleBtn">생성 규칙 저장</button>
+        <button id="resetCreationSessionBtn" class="danger">플레이어 생성 진행 초기화</button>
+        <button id="clearClassListBtn" class="danger">직업 목록 전체 삭제</button>
+        <hr class="soft-line" />
+        <h3>직업 제작</h3>
+        <input id="classNameInput" placeholder="직업 이름" />
+        <input id="classMinRollInput" type="number" placeholder="직업 주사위 최소 눈, 1~20" />
+        <input id="classMaxRollInput" type="number" placeholder="직업 주사위 최대 눈, 비우면 20" />
+        <textarea id="classDescInput" placeholder="직업 설명"></textarea>
+        <label class="check-row"><input id="classIsMerchantInput" type="checkbox" /> 상인 직업</label>
+        <select id="classShopNpcSelect"></select>
+        <h3>직업 스탯 보정</h3>
+        <div id="classStats" class="stat-grid"></div>
+        <select id="classSkillSelect"></select>
+        <button id="addClassSkillBtn">초기 스킬 추가</button>
+        <div id="classSkillPreview" class="mini-list"></div>
+        <button id="addClassBtn">직업 저장</button>
+        <div id="classList" class="list-box"></div>
+      </section>
+
+      <section class="card">
+        <h2>플레이어 설정</h2>
+        <input id="playerName" placeholder="캐릭터 이름" />
+        <div class="form-grid">
+          <input id="playerLevel" type="number" placeholder="레벨" />
+          <input id="playerExp" type="number" placeholder="현재 경험치" />
+          <input id="playerNextExp" type="number" placeholder="다음 레벨 경험치" />
+          <input id="playerGold" type="number" placeholder="소지금" />
+          <input id="playerHype" type="number" placeholder="고양감" />
+          <input id="playerHp" type="number" placeholder="현재 HP" />
+          <input id="playerMaxHp" type="number" placeholder="최대 HP" />
+          <input id="playerMp" type="number" placeholder="현재 MP" />
+          <input id="playerMaxMp" type="number" placeholder="최대 MP" />
+        </div>
+        <input id="playerStatus" placeholder="상태" />
+        <textarea id="playerMemo" placeholder="메모"></textarea>
+        <label class="file-button wide">초상화 업로드<input id="playerPortrait" type="file" accept="image/*" hidden /></label>
+        <h3>능력치</h3>
+        <div id="playerStats" class="stat-grid"></div>
+        <button id="addPlayerBtn">플레이어 저장 / 수정</button>
+        <div id="playerList" class="list-box"></div>
+      </section>
+
+      <section class="card">
+        <h2>NPC / 적 설정</h2>
+        <input id="npcName" placeholder="NPC 이름" />
+        <select id="npcJob">
+          <option value="merchant">상인</option>
+          <option value="enchanter">인첸트</option>
+          <option value="repair">강화/수리</option>
+          <option value="quest">퀘스트수주</option>
+          <option value="god">신</option>
+        </select>
+        <label class="file-button wide">NPC 초상화 업로드<input id="npcPortrait" type="file" accept="image/*"
+            hidden /></label>
+        <div class="form-grid">
+          <input id="npcHp" type="number" placeholder="HP" />
+          <input id="npcMaxHp" type="number" placeholder="최대 HP" />
+          <input id="npcDef" type="number" placeholder="방어력" />
+          <input id="npcAtk" type="number" placeholder="공격력" />
+        </div>
+        <input id="npcStatus" placeholder="상태" />
+        <input id="npcSkillMemo" placeholder="특수능력 메모" />
+        <label class="check-row"><input id="npcPublic" type="checkbox" /> 공개 여부</label>
+        <h3>공통 능력치</h3>
+        <div id="npcStats" class="stat-grid"></div>
+        <h3>NPC 전용 능력치</h3>
+        <div class="form-grid">
+          <input id="npcSUSPICION" type="number" placeholder="의심도" />
+          <input id="npcAFFECTION" type="number" placeholder="호감도" />
+          <input id="npcMADNESS" type="number" placeholder="광기" />
+          <input id="npcCORRUPTION" type="number" placeholder="타락률" />
+        </div>
+        <button id="addNpcBtn">NPC 저장 / 수정</button>
+        <div id="npcList" class="list-box"></div>
+      </section>
+
+      <section class="card">
+        <h2>보스 설정</h2>
+        <input id="bossName" placeholder="보스 이름" />
+        <div class="form-grid">
+          <input id="bossHp" type="number" placeholder="현재 HP" />
+          <input id="bossMaxHp" type="number" placeholder="최대 HP" />
+          <input id="bossRewardExp" type="number" placeholder="보상 EXP" />
+          <input id="bossRewardGold" type="number" placeholder="보상 Gold" />
+        </div>
+        <input id="bossStatus" placeholder="상태" />
+        <select id="bossAttackType">
+          <option value="slash">참격</option>
+          <option value="pierce">관통</option>
+          <option value="blunt">타격</option>
+          <option value="special">특수</option>
+        </select>
+        <textarea id="bossMemo" placeholder="보스 메모"></textarea>
+        <h3>보스 능력치</h3>
+        <div id="bossStats" class="stat-grid"></div>
+        <h3>보스 드랍</h3>
+        <input id="bossDropItem" placeholder="드랍 아이템 이름" />
+        <input id="bossDropQty" type="number" placeholder="수량" />
+        <input id="bossDropDesc" placeholder="설명" />
+        <h3>보스 펌블 효과</h3>
+        <select id="bossFumbleSelect"></select>
+        <button id="addBossFumbleBtn">펌블 효과 추가</button>
+        <div id="bossFumblePreview" class="mini-list"></div>
+        <button id="addBossBtn">보스 저장 / 수정</button>
+        <div id="bossList" class="list-box"></div>
+      </section>
+
+      <section id="cat-equipment" class="category-divider" data-category="equipment">
+        <h2>장비 / 상점 / 강화</h2>
+      </section>
+
+      <section class="card">
+        <h2>원본 소재 설정</h2>
+        <input id="materialName" placeholder="소재 이름 예: 강철" />
+        <input id="materialDurability" type="number" placeholder="내구도 보정" />
+        <h3>소재 능력치 보정</h3>
+        <div id="materialStats" class="stat-grid"></div>
+        <textarea id="materialDesc" placeholder="설명"></textarea>
+        <button id="addMaterialBtn">소재 저장 / 수정</button>
+        <div id="materialList" class="list-box"></div>
+      </section>
+
+      <section class="card">
+        <h2>인챈트 설정</h2>
+        <input id="enchantName" placeholder="인챈트 이름" />
+        <h3>추가 능력치</h3>
+        <div id="enchantStats" class="stat-grid"></div>
+        <select id="enchantDebuff"></select>
+        <select id="enchantSkill"></select>
+        <textarea id="enchantDesc" placeholder="설명"></textarea>
+        <button id="addEnchantBtn">인챈트 저장 / 수정</button>
+        <div id="enchantList" class="list-box"></div>
+      </section>
+
+      <section class="card">
+        <h2>장비 제작</h2>
+        <input id="equipmentName" placeholder="장비 이름" />
+        <select id="equipmentType">
+          <option value="weapon">무기</option>
+          <option value="helmet">투구</option>
+          <option value="armor">갑옷</option>
+          <option value="gloves">장갑</option>
+          <option value="boots">신발</option>
+          <option value="accessory1">악세사리 1</option>
+          <option value="accessory2">악세사리 2</option>
+        </select>
+        <select id="equipmentAttackType">
+          <option value="slash">참격</option>
+          <option value="pierce">관통</option>
+          <option value="blunt">타격</option>
+          <option value="special">특수</option>
+        </select>
+        <div class="reward-box">
+          <h3>방어구 공격유형 내성</h3>
+          <div class="form-grid">
+            <input id="resistSlash" type="number" placeholder="참격 내성" />
+            <input id="resistPierce" type="number" placeholder="관통 내성" />
+            <input id="resistBlunt" type="number" placeholder="타격 내성" />
+            <input id="resistSpecial" type="number" placeholder="특수 내성" />
+          </div>
+          <p class="muted small-text">무기에는 공격유형이 적용되고, 방어구에는 내성이 적용됩니다.</p>
+        </div>
+        <select id="equipmentMaterial"></select>
+        <select id="equipmentEnchant"></select>
+        <input id="equipmentDurability" type="number" placeholder="기본 내구도" />
+        <label class="check-row"><input id="equipmentEnchantable" type="checkbox" checked /> 인챈트 가능</label>
+        <h3>장비 능력치 보정</h3>
+        <div id="equipmentStats" class="stat-grid"></div>
+        <label class="file-button wide">장비 이미지 업로드<input id="equipmentImage" type="file" accept="image/*"
+            hidden /></label>
+        <textarea id="equipmentDesc" placeholder="설명"></textarea>
+        <button id="addEquipmentBtn">장비 저장 / 수정</button>
+        <div id="equipmentList" class="list-box"></div>
+      </section>
+
+      <section class="card">
+        <h2>NPC 직업 설명 설정</h2>
+        <select id="npcJobConfigSelect">
+          <option value="merchant">상인</option>
+          <option value="enchanter">인첸트</option>
+          <option value="repair">강화/수리</option>
+          <option value="quest">퀘스트수주</option>
+          <option value="god">신</option>
+        </select>
+        <input id="npcJobConfigTitle" placeholder="직업 표시 이름" />
+        <textarea id="npcJobConfigDesc" placeholder="직업 설명 / 가능한 기능 / 대사 힌트"></textarea>
+        <button id="saveNpcJobConfigBtn">직업 설명 저장</button>
+        <div id="npcJobConfigList" class="list-box"></div>
+      </section>
+
+      <section class="card">
+        <h2>아이템 / 인벤토리</h2>
+        <input id="itemName" placeholder="아이템 이름" />
+        <input id="itemQty" type="number" placeholder="수량" />
+        <input id="itemOwner" placeholder="보유자 이름 또는 파티 공용" />
+        <label class="file-button wide">아이템 이미지 업로드<input id="itemImage" type="file" accept="image/*" hidden /></label>
+        <textarea id="itemDesc" placeholder="설명"></textarea>
+        <select id="itemEffect">
+          <option value="none">효과 없음</option>
+          <option value="heal">HP 회복</option>
+          <option value="mpHeal">MP 회복</option>
+          <option value="condition">상태이상 적용</option>
+        </select>
+        <input id="itemEffectAmount" type="number" placeholder="효과 수치" />
+        <select id="itemCondition"></select>
+        <label class="check-row"><input id="itemUsed" type="checkbox" /> 사용됨</label>
+        <button id="addItemBtn">아이템 저장 / 수정</button>
+        <div id="itemList" class="list-box"></div>
+      </section>
+
+      <section class="card">
+        <h2>상점 설정</h2>
+        <select id="shopNpcSelect"></select>
+        <select id="shopGoodsType">
+          <option value="item">아이템</option>
+          <option value="equipment">장비</option>
+          <option value="skill">스킬</option>
+        </select>
+        <select id="shopGoodsSelect"></select>
+        <input id="shopGoodsPrice" type="number" placeholder="가격" />
+        <input id="shopGoodsStock" type="number" placeholder="재고, 비우면 무제한" />
+        <button id="addShopGoodsBtn">상점 상품 추가</button>
+        <div id="shopList" class="list-box"></div>
+      </section>
+
+      <section class="card">
+        <h2>상인 판매 목록 설정</h2>
+        <p class="muted">상인 NPC가 판매할 아이템/장비/스킬을 설정합니다.</p>
+        <select id="merchantShopNpcSelect"></select>
+        <label class="file-button wide">상점 화면 이미지 업로드<input id="merchantShopImage" type="file" accept="image/*"
+            hidden /></label>
+        <textarea id="merchantShopIntro" placeholder="상점 소개 / 목차 상단 설명"></textarea>
+        <button id="saveMerchantShopLookBtn">상점 화면 저장</button>
+        <select id="merchantShopType">
+          <option value="item">아이템</option>
+          <option value="equipment">장비</option>
+          <option value="skill">스킬</option>
+        </select>
+        <select id="merchantShopGoodsSelect"></select>
+        <input id="merchantShopPrice" type="number" placeholder="필요 Gold" />
+        <input id="merchantShopStock" type="number" placeholder="재고, 비우면 무제한" />
+        <button id="addMerchantShopGoodsBtn">상인 판매품 추가</button>
+        <button id="clearMerchantShopBtn" class="danger">상인 판매 목록 전체 삭제</button>
+        <div id="merchantShopList" class="list-box"></div>
+      </section>
+
+      <section class="card">
+        <h2>강화 설정</h2>
+        <input id="upgradeLevel" type="number" placeholder="강화 단계 예: 1" />
+        <input id="upgradeSuccess" type="number" placeholder="성공률 %" />
+        <input id="upgradeCost" type="number" placeholder="비용" />
+        <input id="upgradeStatBonus" type="number" placeholder="성공 시 모든 장비 스탯 +수치" />
+        <input id="upgradeDurabilityPenalty" type="number" placeholder="실패 시 내구도 감소" />
+        <label class="check-row"><input id="upgradeBreakable" type="checkbox" /> 실패 시 파괴 가능</label>
+        <button id="addUpgradeRuleBtn">강화 규칙 추가</button>
+        <div id="upgradeRuleList" class="list-box"></div>
+      </section>
+
+      <section class="card">
+        <h2>대장간 화면 설정</h2>
+        <p class="muted">강화/수리 NPC의 장면 오버레이와 플레이어 직접 강화 규칙을 설정합니다.</p>
+        <select id="forgeNpcSelect"></select>
+        <label class="file-button wide">대장간 화면 이미지 업로드<input id="forgeImage" type="file" accept="image/*"
+            hidden /></label>
+        <textarea id="forgeIntro" placeholder="대장간 소개 / 상단 설명"></textarea>
+        <input id="forgeUpgradePrice" type="number" placeholder="강화 1회 가격 Gold" />
+        <input id="forgeRepairPrice" type="number" placeholder="내구도 1당 수리 가격 Gold" />
+        <select id="forgeUpgradeMode">
+          <option value="chance">단순확률</option>
+          <option value="timing">타이밍 스타포스</option>
+        </select>
+        <input id="forgeSuccessChance" type="number" placeholder="단순확률 성공률 %" />
+        <input id="forgeDestroyFrom" type="number" placeholder="타이밍 방식 파괴 시작 강화 수치" />
+        <button id="saveForgeConfigBtn">대장간 설정 저장</button>
+        <div id="forgeConfigList" class="list-box"></div>
+      </section>
+
+      <section class="card">
+        <h2>월드 이벤트 설정</h2>
+        <input id="worldEventName" placeholder="이벤트 이름" />
+        <select id="worldEventType">
+          <option value="condition">전체 상태이상</option>
+          <option value="damage">전체 피해</option>
+          <option value="heal">전체 회복</option>
+          <option value="weather">날씨 변경</option>
+          <option value="time">시간 변경</option>
+          <option value="faction">세력 평판 변화</option>
+        </select>
+        <input id="worldEventEvery" type="number" placeholder="몇 턴마다 발생" />
+        <input id="worldEventValue" type="number" placeholder="효과 수치" />
+        <select id="worldEventCondition"></select>
+        <input id="worldEventText" placeholder="날씨/시간/세력 이름 또는 설명" />
+        <button id="addWorldEventBtn">월드 이벤트 추가</button>
+        <div id="worldEventList" class="list-box"></div>
+      </section>
+
+      <section class="card">
+        <h2>랜덤 조우 / 이벤트 테이블</h2>
+        <input id="encounterName" placeholder="이벤트 이름" />
+        <input id="encounterWeight" type="number" placeholder="가중치" />
+        <textarea id="encounterDesc" placeholder="내용"></textarea>
+        <button id="addEncounterBtn">랜덤 이벤트 추가</button>
+        <div id="encounterList" class="list-box"></div>
+      </section>
+
+      <section class="card">
+        <h2>세력 설정</h2>
+        <input id="factionName" placeholder="세력 이름" />
+        <input id="factionRep" type="number" placeholder="초기 평판" />
+        <textarea id="factionDesc" placeholder="세력 설명"></textarea>
+        <button id="addFactionBtn">세력 추가</button>
+        <div id="factionList" class="list-box"></div>
+      </section>
+
+      <section id="cat-story" class="category-divider" data-category="story">
+        <h2>연출 / 스토리 / 세션</h2>
+      </section>
+
+      <section class="card">
+        <h2>스킬 트리 설정</h2>
+        <input id="treeName" placeholder="스킬 트리 이름 예: 전사" />
+        <select id="treeSkillSelect"></select>
+        <input id="treeSkillReqLevel" type="number" placeholder="요구 레벨" />
+        <button id="addTreeSkillBtn">트리에 스킬 추가</button>
+        <div id="treeSkillPreview" class="mini-list"></div>
+        <button id="addSkillTreeBtn">스킬 트리 저장</button>
+        <div id="skillTreeList" class="list-box"></div>
+      </section>
+
+      <section class="card">
+        <h2>저장 슬롯</h2>
+        <input id="saveSlotName" placeholder="슬롯 이름 예: 캠페인1" />
+        <button id="saveToSlotBtn">현재 데이터 슬롯 저장</button>
+        <div id="saveSlotList" class="list-box"></div>
+      </section>
+
+      <section class="card advanced-systems-card">
+        <h2>고급 시스템 허브</h2>
+        <p class="muted">추가 시스템은 접힘 패널로 정리됩니다. 필요한 항목만 열어서 사용하세요.</p>
+
+        <details open>
+          <summary>컷신 / 대화 연출</summary>
+          <input id="cutsceneSpeaker" placeholder="화자 이름" />
+          <textarea id="cutsceneText" placeholder="대사 / 컷신 문장"></textarea>
+          <select id="cutscenePortraitNpc"></select>
+          <button id="playCutsceneBtn">컷신 저장/재생</button>
+          <div id="cutsceneList" class="list-box"></div>
+        </details>
+
+        <details>
+          <summary>사운드 이펙트</summary>
+          <input id="sfxName" placeholder="효과음 이름" />
+          <input id="sfxUrl" placeholder="효과음 URL / mp3/wav" />
+          <button id="addSfxBtn">효과음 저장</button>
+          <div id="sfxList" class="list-box"></div>
+        </details>
+
+        <details>
+          <summary>광기 / 공포 / 저주 / 감염</summary>
+          <input id="fearName" placeholder="공포 판정 이름" />
+          <select id="fearStat"></select>
+          <input id="fearDifficulty" type="number" placeholder="난이도" />
+          <input id="fearMadnessGain" type="number" placeholder="실패 시 광기 증가" />
+          <button id="addFearRuleBtn">공포 규칙 저장</button>
+          <input id="curseName" placeholder="저주/감염 이름" />
+          <input id="curseMadnessPerTurn" type="number" placeholder="턴마다 광기 증가" />
+          <input id="curseHpPerTurn" type="number" placeholder="턴마다 HP 감소" />
+          <button id="addCurseBtn">저주/감염 저장</button>
+          <div id="horrorList" class="list-box"></div>
+        </details>
+
+        <details>
+          <summary>신앙 / 특수자원</summary>
+          <input id="deityName" placeholder="신 이름" />
+          <input id="deityFaithReq" type="number" placeholder="기적 요구 신앙" />
+          <textarea id="deityBlessing" placeholder="축복 / 패시브 설명"></textarea>
+          <button id="addDeityBtn">신앙 규칙 저장</button>
+          <input id="resourceName" placeholder="특수 자원 이름 예: 분노, 에테르" />
+          <input id="resourceDefault" type="number" placeholder="기본값" />
+          <button id="addResourceBtn">특수자원 저장</button>
+          <div id="faithResourceList" class="list-box"></div>
+        </details>
+
+        <details>
+          <summary>보스 페이즈 / 부위 파괴 / 처형</summary>
+          <select id="phaseBossSelect"></select>
+          <input id="phaseHpPercent" type="number" placeholder="발동 HP % 예: 70" />
+          <input id="phaseName" placeholder="페이즈 이름" />
+          <input id="phaseBgm" placeholder="페이즈 BGM URL" />
+          <textarea id="phaseEffect" placeholder="페이즈 효과 / 패턴 설명"></textarea>
+          <button id="addBossPhaseBtn">페이즈 추가</button>
+          <input id="bossPartName" placeholder="부위 이름 예: 왼팔" />
+          <input id="bossPartHp" type="number" placeholder="부위 HP" />
+          <textarea id="bossPartEffect" placeholder="파괴 효과"></textarea>
+          <button id="addBossPartBtn">부위 추가</button>
+          <label class="check-row"><input id="executionEnabled" type="checkbox" /> HP 10% 이하 처형 가능</label>
+          <div id="bossAdvancedList" class="list-box"></div>
+        </details>
+
+        <details>
+          <summary>조사 / 던전 / 환경 상호작용</summary>
+          <input id="inspectName" placeholder="조사 포인트 이름" />
+          <textarea id="inspectPublic" placeholder="공개 설명"></textarea>
+          <textarea id="inspectSecret" placeholder="마스터 비밀 정보"></textarea>
+          <button id="addInspectBtn">조사 포인트 저장</button>
+          <input id="dungeonNodeName" placeholder="던전 노드 이름" />
+          <textarea id="dungeonChoices" placeholder="선택지 목록, 줄바꿈으로 구분"></textarea>
+          <button id="addDungeonNodeBtn">던전 노드 저장</button>
+          <input id="environmentName" placeholder="환경 오브젝트 예: 폭발 배럴" />
+          <textarea id="environmentEffect" placeholder="상호작용 효과"></textarea>
+          <button id="addEnvironmentBtn">환경 오브젝트 저장</button>
+          <div id="explorationList" class="list-box"></div>
+        </details>
+
+        <details>
+          <summary>캠프 / 휴식 / 시간 제한 / 월드 변화</summary>
+          <input id="campName" placeholder="휴식 이름" />
+          <input id="campHp" type="number" placeholder="HP 회복량" />
+          <input id="campMp" type="number" placeholder="MP 회복량" />
+          <button id="addCampBtn">휴식 규칙 저장</button>
+          <input id="timerName" placeholder="시간 제한 이름" />
+          <input id="timerTurns" type="number" placeholder="제한 턴" />
+          <button id="addTimerBtn">시간 제한 추가</button>
+          <input id="worldChangeName" placeholder="월드 변화 이름" />
+          <textarea id="worldChangeDesc" placeholder="변화 내용"></textarea>
+          <button id="addWorldChangeBtn">월드 변화 기록</button>
+          <div id="worldAdvancedList" class="list-box"></div>
+        </details>
+
+        <details>
+          <summary>제작 / 연금 / 요리 / 장비 세트효과</summary>
+          <input id="recipeName" placeholder="제작법 이름" />
+          <textarea id="recipeMaterials" placeholder="재료, 줄바꿈 구분"></textarea>
+          <input id="recipeResult" placeholder="결과물" />
+          <button id="addRecipeBtn">제작법 저장</button>
+          <input id="setName" placeholder="세트 이름" />
+          <input id="setPieces" type="number" placeholder="필요 장비 수" />
+          <textarea id="setEffect" placeholder="세트 효과"></textarea>
+          <button id="addSetBtn">세트 효과 저장</button>
+          <div id="craftList" class="list-box"></div>
+        </details>
+
+        <details>
+          <summary>개인 퀘스트 / 기억 파편 / 멀티 엔딩</summary>
+          <input id="personalQuestOwner" placeholder="대상 플레이어 이름" />
+          <input id="personalQuestTitle" placeholder="개인 퀘스트 제목" />
+          <textarea id="personalQuestDesc" placeholder="퀘스트 내용"></textarea>
+          <button id="addPersonalQuestBtn">개인 퀘스트 저장</button>
+          <input id="memoryTitle" placeholder="기억 파편 제목" />
+          <textarea id="memoryText" placeholder="기억 파편 내용"></textarea>
+          <button id="addMemoryBtn">기억 파편 저장</button>
+          <input id="endingName" placeholder="엔딩 이름" />
+          <textarea id="endingCondition" placeholder="엔딩 조건"></textarea>
+          <button id="addEndingBtn">엔딩 기록</button>
+          <div id="storyAdvancedList" class="list-box"></div>
+        </details>
+      </section>
+
+      <section class="card">
+        <h2>펌블 효과 설정</h2>
+        <input id="fumbleName" placeholder="펌블 이름" />
+        <select id="fumbleType">
+          <option value="weaponDurability">무기 내구도 변화</option>
+          <option value="armorDurability">방어구 내구도 변화</option>
+          <option value="allyDamage">아군 피해</option>
+          <option value="statDown">스탯 감소</option>
+          <option value="weaponDisabled">무기 사용불가</option>
+          <option value="hpDown">체력 감소</option>
+          <option value="maxHpDown">최대체력 감소</option>
+        </select>
+        <select id="fumbleStat"></select>
+        <input id="fumbleValue" type="number" placeholder="수치 / 피해량 / 내구도 변화" />
+        <input id="fumbleDuration" type="number" placeholder="지속 턴" />
+        <textarea id="fumbleDesc" placeholder="설명"></textarea>
+        <button id="addFumbleBtn">펌블 저장 / 수정</button>
+        <div id="fumbleList" class="list-box"></div>
+      </section>
+    </main>
+  </section>
+
+  <section id="playerScreen" class="hidden player-screen">
+    <header class="topbar">
+      <div>
+        <h1>TRPG PLAYER VIEW</h1>
+        <p>플레이어 전용 화면</p>
+      </div>
+      <div class="header-actions">
+        <button id="playerBackModeBtn">처음 화면</button>
+      </div>
+    </header>
+
+    <main class="player-portal">
+      <section id="playerCreatePanel" class="player-create-panel card">
+        <h2>캐릭터 생성</h2>
+        <p class="muted">주사위를 굴려 나온 눈만큼 초기 스탯을 분배할 수 있습니다.</p>
+        <div class="form-grid">
+          <input id="newPlayerName" placeholder="캐릭터 이름" />
+          <input id="newPlayerPassword" type="password" placeholder="캐릭터 접속 비밀번호" />
+        </div>
+        <label class="file-button wide">초상화 업로드<input id="newPlayerPortrait" type="file" accept="image/*"
+            hidden /></label>
+        <button id="rollCreationStatBtn">초기 스탯 주사위</button>
+        <div id="creationRollResult" class="dice-result">스탯 포인트: -</div>
+        <div id="creationRollCountView" class="result-box">남은 굴림: -</div>
+        <h3>스탯 분배</h3>
+        <div id="creationStatsGrid" class="creation-stats-grid"></div>
+        <div id="remainingStatPoints" class="result-box">남은 포인트: 0</div>
+        <h3>직업 선택</h3>
+        <button id="rollClassDiceBtn">직업 주사위 d20</button>
+        <div id="classRollResult" class="dice-result">직업 주사위: -</div>
+        <div id="classRollCountView" class="result-box">직업 굴림 남음: -</div>
+        <select id="creationClassSelect"></select>
+        <div id="creationClassDesc" class="quest-view"></div>
+        <label class="check-row"><input id="skipUnusedStatsReward" type="checkbox" checked /> 남은 스탯 포인트를 보상으로 전환</label>
+        <button id="createPlayerCharacterBtn">캐릭터 생성</button>
+      </section>
+
+      <section id="playerLobbyPanel" class="player-lobby-panel card">
+        <h2>캐릭터 선택</h2>
+        <p class="muted">초상화를 눌러 캐릭터에 접속하세요.</p>
+        <div id="playerLobbyCards" class="player-lobby-cards"></div>
+      </section>
+
+      <section id="playerCharacterPanel" class="player-character-panel hidden">
+        <div class="player-character-layout">
+          <aside class="player-left-sheet card">
+            <button id="leaveCharacterBtn" type="button" data-action="leave-character">캐릭터 선택으로</button>
+            <div id="playerCurrentCharacterSheet"></div>
+            <div class="card mini-card hidden" id="playerMerchantHiddenBox">
+              <h3>NPC / 상점</h3>
+              <select id="playerMerchantSelect"></select>
+            </div>
+            <div class="card mini-card">
+              <h3>주사위</h3>
+              <input id="standalonePlayerDiceMod" type="number" value="0" hidden />
+              <button id="standalonePlayerRollBtn">d20 굴리기</button>
+              <div id="standalonePlayerDiceResult" class="dice-result">결과: -</div>
+            </div>
+          </aside>
+
+          <section class="player-center-scene card">
+            <div id="standalonePlayerSceneBox" class="player-scene-box fixed-player-scene">
+              <img id="standalonePlayerSceneImage" />
+              <div id="standalonePlayerScenePlaceholder">현재 장면 없음</div>
+            </div>
+            <div id="standalonePlayerCurrentMap" class="player-view-info"></div>
+            <div id="playerInlineShopPanel" class="player-inline-shop hidden">
+              <div class="inline-shop-header">
+                <div>
+                  <h2 id="inlineShopTitle">상점</h2>
+                  <p id="inlineShopIntro" class="muted"></p>
+                </div>
+              </div>
+              <div id="inlineShopImageBox" class="inline-shop-image-box"></div>
+              <div id="inlineShopGoodsList" class="inline-shop-goods-list"></div>
+            </div>
+            <div id="playerInlineForgePanel" class="player-inline-shop player-inline-forge hidden">
+              <div class="inline-shop-header">
+                <div>
+                  <h2 id="playerForgeTitle">대장간</h2>
+                  <p id="playerForgeIntro" class="muted"></p>
+                </div>
+              </div>
+              <div id="playerForgeImageBox" class="inline-shop-image-box"></div>
+              <div id="playerForgeContent" class="forge-content"></div>
+            </div>
+          </section>
+
+          <aside id="playerBossSlidePanel" class="player-boss-slide">
+            <h3>현재 보스</h3>
+            <div id="standalonePlayerBossArea"></div>
+            <h3>턴 순서</h3>
+            <ul id="standalonePlayerTurnList"></ul>
+          </aside>
+        </div>
+      </section>
+    </main>
+  </section>
+
+  <section id="gameScreen" class="hidden">
+    <header class="topbar">
+      <div>
+        <h1>TRPG MASTER DASHBOARD</h1>
+        <p>메인 진행 화면</p>
+      </div>
+      <div class="header-actions">
+        <button id="goModeFromGameBtn">처음 화면</button>
+        <button id="backMasterBtn">마스터 화면</button>
+        <button id="endCombatBtn" class="danger">전투 종료</button>
+      </div>
+    </header>
+
+    <main class="dashboard">
+      <section class="panel left-panel">
+        <div class="card">
+          <h2>d20 주사위</h2>
+          <input id="modifierInput" type="number" placeholder="보정치" />
+          <button id="rollBtn">굴리기</button>
+          <div id="diceResult" class="dice-result">결과: -</div>
+          <button id="clearDiceLogBtn" class="danger">로그 초기화</button>
+        </div>
+
+        <div class="card">
+          <h2>전투 턴 순서</h2>
+          <select id="turnActorSelect"></select>
+          <input id="turnInitInput" type="number" placeholder="선공 / 민첩" />
+          <button id="addTurnBtn">추가</button>
+          <ul id="turnList"></ul>
+          <button id="nextTurnBtn">다음 턴 / 효과 틱</button>
+        </div>
+
+        <div class="card">
+          <h2>월드 상태</h2>
+          <div id="worldStateView" class="quest-view">-</div>
+          <button id="advanceWorldBtn">월드 이벤트 체크</button>
+          <button id="rollEncounterBtn">랜덤 이벤트</button>
+          <div id="encounterResult" class="result-box"></div>
+        </div>
+
+        <div id="logPanel" class="card collapsible-log">
+          <h2>전투 로그</h2>
+          <ul id="diceLog"></ul>
+        </div>
+      </section>
+
+      <section class="panel center-panel">
+        <div class="card">
+          <h2>맵 / 장면</h2>
+          <select id="mapSelect"></select>
+          <button id="loadMapBtn">맵 불러오기</button>
+          <div id="dropZone" class="scene-box">
+            <img id="sceneImage" />
+            <div id="scenePlaceholder">장면 이미지를 드래그하거나 맵을 불러오세요</div>
+            <div id="mainSceneShopPanel" class="main-scene-shop hidden">
+              <div class="main-scene-shop-bg" id="mainSceneShopBg"></div>
+              <div class="main-scene-shop-content">
+                <div class="inline-shop-header">
+                  <div>
+                    <h2 id="mainSceneShopTitle">상점</h2>
+                    <p id="mainSceneShopIntro" class="muted"></p>
+                  </div>
+                  <button id="closeMainSceneShopBtn" class="danger small">닫기</button>
+                </div>
+                <div id="mainSceneShopGoodsList" class="inline-shop-goods-list"></div>
+              </div>
+            </div>
+            <div id="mainSceneForgePanel" class="main-scene-shop main-scene-forge hidden">
+              <div class="main-scene-shop-bg" id="mainSceneForgeBg"></div>
+              <div class="main-scene-shop-content">
+                <div class="inline-shop-header">
+                  <div>
+                    <h2 id="mainSceneForgeTitle">대장간</h2>
+                    <p id="mainSceneForgeIntro" class="muted"></p>
+                  </div>
+                  <button id="closeMainSceneForgeBtn" class="danger small">닫기</button>
+                </div>
+                <div id="mainSceneForgeContentBox" class="forge-content"></div>
+              </div>
+            </div>
+          </div>
+          <input id="sceneFileInput" type="file" accept="image/*" hidden />
+          <div id="mapDescView" class="map-desc"></div>
+          <div id="sceneHistory" class="history-row"></div>
+        </div>
+
+        <div class="card">
+          <h2>다중 보스</h2>
+          <select id="bossSelect"></select>
+          <button id="loadBossBtn">보스 추가 표시</button>
+          <button id="hideBossesBtn" class="danger">보스 전체 숨기기</button>
+          <div id="activeBossArea" class="boss-grid"></div>
+        </div>
+
+        <div class="card">
+          <h2>NPC 불러오기</h2>
+          <select id="npcSelect"></select>
+          <button id="loadNpcBtn">NPC 표시</button>
+          <button id="hideNpcsBtn" class="danger">NPC 전체 숨기기</button>
+          <div id="activeNpcArea" class="npc-grid"></div>
+        </div>
+
+        <div class="card">
+          <h2>플레이어 상태</h2>
+          <div id="mainPlayerCards" class="player-card-grid"></div>
+        </div>
+      </section>
+
+      <section class="panel right-panel">
+        <div class="card">
+          <h2>스킬 / 능력 판정</h2>
+          <label>시전자</label>
+          <select id="checkActorSelect"></select>
+          <label>대상자</label>
+          <select id="checkTargetSelect"></select>
+          <label>스킬</label>
+          <select id="runtimeSkillSelect"></select>
+          <select id="skillSelect">
+            <option value="check">일반 판정</option>
+            <option value="damage">피해</option>
+            <option value="heal">회복</option>
+            <option value="status">상태이상 적용</option>
+            <option value="cleanse">상태이상 해제</option>
+          </select>
+          <select id="attackTypeSelect">
+            <option value="slash">참격</option>
+            <option value="pierce">관통</option>
+            <option value="blunt">타격</option>
+            <option value="special">특수</option>
+          </select>
+          <select id="checkStatSelect"></select>
+          <input id="checkDiceInput" type="number" placeholder="주사위 숫자" />
+          <input id="checkBonusInput" type="number" placeholder="추가 보정" />
+          <input id="hypeUseInput" type="number" placeholder="고양감 사용량, 1당 보정 +1" />
+          <input id="effectAmountInput" type="number" placeholder="효과 수치" />
+          <select id="runtimeConditionSelect"></select>
+          <button id="statCheckBtn">판정 / 적용</button>
+          <div id="statCheckResult" class="result-box"></div>
+        </div>
+
+        <div class="card">
+          <h2>현재 맵 정보</h2>
+          <div id="currentMapInfo" class="quest-view">-</div>
+        </div>
+
+        <div class="card">
+          <h2>상점 / 강화</h2>
+          <select id="runtimeShopNpcSelect"></select>
+          <select id="runtimeShopTarget"></select>
+          <button id="openShopBtn">상점 열기</button>
+          <select id="runtimeUpgradeTarget"></select>
+          <button id="openUpgradeBtn">강화 열기</button>
+        </div>
+
+        <div class="card">
+          <h2>세력 평판</h2>
+          <div id="factionView" class="quest-view"></div>
+        </div>
+
+        <div class="card">
+          <h2>연출 모드</h2>
+          <button id="effectBossBtn">보스 등장</button>
+          <button id="effectHitBtn">피격 플래시</button>
+          <button id="effectDangerBtn">위험 경고</button>
+        </div>
+        </div>
+
+        <div class="card compact-tools-card">
+          <h2>고급 진행 도구</h2>
+          <details>
+            <summary>컷신 / 조사 / 세션 기록</summary>
+            <select id="runtimeCutsceneSelect"></select>
+            <button id="runtimePlayCutsceneBtn">컷신 재생</button>
+            <select id="runtimeInspectSelect"></select>
+            <button id="runtimeRevealInspectBtn">조사 공개</button>
+            <button id="exportSessionBtn">세션 기록 TXT</button>
+          </details>
+          <details>
+            <summary>공포 / 휴식 / 타이머</summary>
+            <select id="runtimeFearSelect"></select>
+            <select id="runtimeFearTarget"></select>
+            <button id="runtimeFearCheckBtn">공포 판정</button>
+            <select id="runtimeCampSelect"></select>
+            <button id="runtimeCampBtn">휴식 적용</button>
+            <div id="timerView" class="quest-view"></div>
+          </details>
+        </div>
+
+        <div class="card">
+          <h2>BGM</h2>
+          <audio id="bgmPlayer" controls loop></audio>
+        </div>
+      </section>
+    </main>
+  </section>
+
+  <div id="masterLoginModal" class="modal hidden">
+    <div class="modal-content login-modal-content">
+      <div class="modal-header">
+        <h2>마스터 접속</h2>
+        <button id="closeMasterLoginBtn" class="danger">닫기</button>
+      </div>
+      <p class="muted">마스터 비밀번호를 입력하세요.</p>
+      <input id="masterLoginPassword" type="password" placeholder="비밀번호" />
+      <button id="confirmMasterLoginBtn">접속</button>
+      <div id="masterLoginError" class="login-error"></div>
+    </div>
+  </div>
+
+  <div id="toastMessage" class="toast-message hidden"></div>
+
+  <div id="inventoryModal" class="modal hidden">
+    <div class="modal-content inventory-modal-content">
+      <div class="modal-header">
+        <h2 id="inventoryTitle">인벤토리</h2>
+        <button id="closeInventoryBtn" class="danger">닫기</button>
+      </div>
+      <div class="inventory-layout">
+        <div>
+          <h3>아이템</h3>
+          <div id="inventoryContent"></div>
+        </div>
+        <div>
+          <h3>장비</h3>
+          <div id="equipmentSlots"></div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div id="shopModal" class="modal hidden">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h2 id="shopTitle">상점</h2>
+        <button id="closeShopBtn" class="danger">닫기</button>
+      </div>
+      <div id="shopContent"></div>
+    </div>
+  </div>
+
+  <div id="upgradeModal" class="modal hidden">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h2>강화</h2>
+        <button id="closeUpgradeBtn" class="danger">닫기</button>
+      </div>
+      <div id="upgradeContent"></div>
+    </div>
+  </div>
+
+  <div id="screenEffect" class="screen-effect hidden"></div>
+  <div id="cutsceneOverlay" class="cutscene-overlay hidden">
+    <div class="cutscene-box">
+      <img id="cutscenePortrait" class="cutscene-portrait hidden" />
+      <div class="cutscene-text-area">
+        <div id="cutsceneSpeakerView" class="cutscene-speaker"></div>
+        <div id="cutsceneTextView" class="cutscene-text"></div>
+        <button id="closeCutsceneBtn">닫기</button>
+      </div>
+    </div>
+  </div>
+
+  <div id="skillModal" class="modal hidden">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h2 id="skillModalTitle">스킬</h2>
+        <button id="closeSkillBtn" class="danger">닫기</button>
+      </div>
+      <div id="skillModalContent"></div>
+    </div>
+  </div>
+
+  <div id="levelModal" class="modal hidden">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h2 id="levelModalTitle">스탯 강화</h2>
+        <button id="closeLevelBtn" class="danger">닫기</button>
+      </div>
+      <p id="levelModalInfo" class="muted"></p>
+      <div id="levelStatButtons" class="stat-button-grid"></div>
+    </div>
+  </div>
+
+  <div id="playerShopModal" class="modal hidden">
+    <div class="modal-content player-shop-content">
+      <div class="modal-header">
+        <h2 id="playerShopTitle">상점</h2>
+        <button id="closePlayerShopBtn" class="danger">닫기</button>
+      </div>
+      <div id="playerShopGoodsList" class="player-shop-goods-list"></div>
+    </div>
+  </div>
+
+  <script type="module" src="js/init.js"></script>
+</body>
+
+</html>
